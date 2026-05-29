@@ -2,14 +2,26 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../lib/supabase';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleLogin = async () => {
-    setMessage('Login coming soon — waiting for Supabase keys!');
+    setLoading(true);
+    setMessage('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setMessage(error.message);
+    } else {
+      router.push('/home');
+    }
+    setLoading(false);
   };
 
   return (
@@ -40,17 +52,20 @@ export default function LoginPage() {
             />
           </div>
 
-          {message && <p className="text-yellow-400 text-sm">{message}</p>}
+          {message && (
+            <p className="text-red-400 text-sm">{message}</p>
+          )}
 
           <button
             onClick={handleLogin}
-            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2"
+            disabled={loading || !email || !password}
+            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Log In
+            {loading ? 'Logging in...' : 'Log In'}
           </button>
 
           <p className="text-gray-500 text-sm text-center">
-            Don't have an account?{' '}
+            Do not have an account?{' '}
             <Link href="/register" className="text-white underline">
               Register
             </Link>

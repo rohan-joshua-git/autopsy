@@ -2,14 +2,24 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { supabase } from '../../lib/supabase';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
-    setMessage('Register coming soon — waiting for Supabase keys!');
+    setLoading(true);
+    setMessage('');
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) {
+      setMessage(error.message);
+    } else {
+      setMessage('Account created! Check your email to confirm, then log in.');
+    }
+    setLoading(false);
   };
 
   return (
@@ -40,13 +50,18 @@ export default function RegisterPage() {
             />
           </div>
 
-          {message && <p className="text-yellow-400 text-sm">{message}</p>}
+          {message && (
+            <p className={`text-sm ${message.includes('error') || message.includes('Error') ? 'text-red-400' : 'text-green-400'}`}>
+              {message}
+            </p>
+          )}
 
           <button
             onClick={handleRegister}
-            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2"
+            disabled={loading || !email || !password}
+            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Create Account
+            {loading ? 'Creating account...' : 'Create Account'}
           </button>
 
           <p className="text-gray-500 text-sm text-center">
