@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '../../lib/supabase';
 
 const prompts = [
   "What was the main thing that went wrong?",
@@ -12,6 +14,9 @@ export default function UploadPage() {
   const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('reflect');
   const [answers, setAnswers] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const router = useRouter();
 
   const handleChange = (index: number, value: string) => {
     const updated = [...answers];
@@ -19,18 +24,39 @@ export default function UploadPage() {
     setAnswers(updated);
   };
 
-  const handleSubmit = () => {
-    console.log('Reflection submitted:', answers);
-    setSubmitted(true);
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError('');
+
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+
+    const { error } = await supabase.from('failures').insert({
+      user_id: user.id,
+      type: 'reflection',
+      answers: answers,
+      tags: [],
+    });
+
+    if (error) {
+      setError('Something went wrong saving your reflection. Please try again.');
+      console.error(error);
+    } else {
+      setSubmitted(true);
+    }
+
+    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-8">
-      {/* Header */}
       <h1 className="text-3xl font-bold mb-2">New Entry</h1>
       <p className="text-gray-400 mb-8">Upload an exam script or write a reflection</p>
 
-      {/* Tabs */}
       <div className="flex gap-4 mb-8">
         <button
           onClick={() => setActiveTab('upload')}
@@ -54,7 +80,6 @@ export default function UploadPage() {
         </button>
       </div>
 
-      {/* Upload Tab */}
       {activeTab === 'upload' && (
         <div className="border-2 border-dashed border-gray-700 rounded-2xl p-16 text-center">
           <p className="text-4xl mb-4">📄</p>
@@ -66,18 +91,23 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* Reflect Tab */}
       {activeTab === 'reflect' && (
         <div>
           {submitted ? (
             <div className="bg-green-900/40 border border-green-500 rounded-2xl p-8 text-center">
-              <p className="text-green-400 text-xl font-medium">✅ Reflection saved!</p>
-              <button
-                onClick={() => { setSubmitted(false); setAnswers(['', '', '']); }}
-                className="mt-4 text-gray-400 underline text-sm"
-              >
-                Write another
-              </button>
+              <p className="text-green-400 text-xl font-medium">Reflection saved!</p>
+              <p className="text-gray-400 text-sm mt-2">It will appear in your Failure Library</p>
+              <div className="flex gap-4 justify-center mt-4">
+                <button
+                  onClick={() => { setSubmitted(false); setAnswers(['', '', '']); }}
+                  className="text-gray-400 underline text-sm"
+                >
+                  Write another
+                </button>
+                <a href="/home" className="text-white underline text-sm">
+                  View Library
+                </a>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col gap-6">
@@ -94,12 +124,15 @@ export default function UploadPage() {
                   />
                 </div>
               ))}
+
+              {error && <p className="text-red-400 text-sm">{error}</p>}
+
               <button
                 onClick={handleSubmit}
-                disabled={answers.every(a => a.trim() === '')}
+                disabled={loading || answers.every(a => a.trim() === '')}
                 className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-start"
               >
-                Save Reflection
+                {loading ? 'Saving...' : 'Save Reflection'}
               </button>
             </div>
           )}
