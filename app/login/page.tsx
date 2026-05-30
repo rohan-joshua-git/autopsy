@@ -3,34 +3,65 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '@/lib/supabase';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [message, setMessage] = useState('');
+  const [isError, setIsError] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!email || !password) {
+      setIsError(true);
+      setMessage('Please enter both email and password parameters.');
+      return;
+    }
+
     setLoading(true);
     setMessage('');
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      setMessage(error.message);
-    } else {
-      router.push('/home');
+    setIsError(false);
+
+    try {
+      // Execute the live Supabase sign-in profile verification sequence
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setIsError(true);
+        setMessage(error.message);
+      } else if (data?.user) {
+        setIsError(false);
+        setMessage('✓ Secure session established! Redirecting...');
+        
+        // Push the authenticated user straight into the dashboard workspace
+        setTimeout(() => {
+          router.push('/home');
+        }, 600);
+      }
+    } catch (err) {
+      setIsError(true);
+      setMessage('An unexpected error occurred during session initialization.');
+      console.error('[login] Transaction failure:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-8">
-      <div className="bg-gray-900 rounded-2xl p-10 w-full max-w-md">
+      <div className="bg-gray-900 rounded-2xl p-10 w-full max-w-md border border-gray-800/40">
         <h1 className="text-3xl font-bold mb-2">Welcome back</h1>
         <p className="text-gray-400 mb-8">Log in to your Autopsy account</p>
 
-        <div className="flex flex-col gap-4">
+        {/* Form element handles 'Enter' key submission triggers natively */}
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div>
             <label className="text-sm text-gray-400 mb-1 block">Email</label>
             <input
@@ -38,7 +69,8 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@email.com"
-              className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-white/20"
+              disabled={loading}
+              className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-50 transition-all"
             />
           </div>
           <div>
@@ -48,29 +80,32 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-white/20"
+              disabled={loading}
+              className="w-full bg-gray-800 text-white rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-white/20 disabled:opacity-50 transition-all"
             />
           </div>
 
           {message && (
-            <p className="text-red-400 text-sm">{message}</p>
+            <p className={`text-sm mt-1 ${isError ? 'text-red-400' : 'text-green-400'}`}>
+              {message}
+            </p>
           )}
 
           <button
-            onClick={handleLogin}
-            disabled={loading || !email || !password}
-            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            type="submit"
+            disabled={loading}
+            className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors mt-2 disabled:opacity-50 flex justify-center items-center"
           >
-            {loading ? 'Logging in...' : 'Log In'}
+            {loading ? 'Verifying Session...' : 'Log In'}
           </button>
 
-          <p className="text-gray-500 text-sm text-center">
-            Do not have an account?{' '}
-            <Link href="/register" className="text-white underline">
+          <p className="text-gray-500 text-sm text-center mt-2">
+            Don't have an account?{' '}
+            <Link href="/register" className="text-white underline hover:text-gray-200 transition-colors">
               Register
             </Link>
           </p>
-        </div>
+        </form>
       </div>
     </div>
   );
