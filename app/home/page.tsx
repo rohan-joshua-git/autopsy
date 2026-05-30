@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
 const TAG_COLOURS: Record<string, string> = {
@@ -22,9 +23,17 @@ type Entry = {
 export default function HomePage() {
   const [entries, setEntries] = useState<Entry[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    const fetchEntries = async () => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
       const { data, error } = await supabase
         .from('failures')
         .select('*')
@@ -36,8 +45,8 @@ export default function HomePage() {
       setLoading(false);
     };
 
-    fetchEntries();
-  }, []);
+    init();
+  }, [router]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-GB', {
@@ -46,6 +55,14 @@ export default function HomePage() {
       year: 'numeric',
     });
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-950 text-white p-8">
@@ -60,9 +77,7 @@ export default function HomePage() {
       </div>
       <p className="text-gray-400 mb-8">Your personal history of setbacks and growth</p>
 
-      {loading ? (
-        <p className="text-gray-500">Loading your entries...</p>
-      ) : entries.length === 0 ? (
+      {entries.length === 0 ? (
         <div className="text-center py-20">
           <p className="text-gray-500 text-lg mb-4">No entries yet</p>
           <a href="/upload" className="text-white underline">
