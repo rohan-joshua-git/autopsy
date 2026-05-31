@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -30,7 +30,7 @@ const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> 
 const DEFAULT_TAG = { bg: '#1a1a16', color: '#5F5E5A', border: '#2e2e28' };
 const getTagStyle = (tag: string) => TAG_COLORS[tag] || DEFAULT_TAG;
 
-export default function ReflectPage() {
+function ReflectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [title, setTitle] = useState('Untitled Case');
@@ -127,6 +127,7 @@ export default function ReflectPage() {
         {[
           { icon: 'ti-layout-grid', label: 'Case Files', action: () => router.push('/home') },
           { icon: 'ti-upload', label: 'New Intake', action: () => router.push('/upload') },
+          { icon: 'ti-flask', label: 'POC Demo', action: () => router.push('/poc') },
           { icon: 'ti-search', label: 'Search', action: () => {} },
         ].map(item => (
           <div key={item.label} onClick={item.action} style={{
@@ -138,6 +139,15 @@ export default function ReflectPage() {
             {item.label}
           </div>
         ))}
+        <div style={{ marginTop: 'auto' }}>
+          <div onClick={() => supabase.auth.signOut().then(() => router.push('/login'))} style={{
+            padding: '8px 20px', fontSize: 13, color: '#3a3a30', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 10, borderLeft: '2px solid transparent',
+          }}>
+            <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true" />
+            Sign out
+          </div>
+        </div>
       </div>
 
       {/* Main */}
@@ -178,7 +188,6 @@ export default function ReflectPage() {
               <h1 style={{ fontSize: 20, fontWeight: 500, color: '#c8c8c0', margin: 0 }}>{title}</h1>
             </div>
 
-            {/* Tags */}
             {overallTags.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24 }}>
                 {overallTags.map(tag => {
@@ -192,7 +201,6 @@ export default function ReflectPage() {
               </div>
             )}
 
-            {/* Question breakdown */}
             <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 12 }}>
               Findings — {questions.length} error{questions.length !== 1 ? 's' : ''} identified
             </div>
@@ -255,5 +263,17 @@ export default function ReflectPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ReflectPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
+        LOADING CASE FILE...
+      </div>
+    }>
+      <ReflectContent />
+    </Suspense>
   );
 }
