@@ -6,15 +6,12 @@ import { useRouter } from 'next/navigation';
 export default function UploadPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // FIXED: Default tab state is now 'upload' instead of 'reflect'
   const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('upload');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  
-  // Manual Reflection State
   const [answers, setAnswers] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const prompts = [
     "What was the main thing that went wrong?",
@@ -22,179 +19,202 @@ export default function UploadPage() {
     "What would you do differently?",
   ];
 
-  const handleButtonClick = () => {
-    fileInputRef.current?.click();
-  };
-
   const handleFileUpload = async (file: File) => {
     if (!file) return;
-
     setLoading(true);
-    setStatusMessage('Uploading and parsing script with Gemini...');
-
+    setStatusMessage('Ingesting file...');
     try {
       const formData = new FormData();
       formData.append('file', file);
-
-      // Post raw payload directly to your NextJS backend processing engine
-      const response = await fetch('/api/parse-exam', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`Parser route returned status code: ${response.status}`);
-      }
-
+      const response = await fetch('/api/parse-exam', { method: 'POST', body: formData });
+      if (!response.ok) throw new Error(`Parser returned status: ${response.status}`);
       const parsedData = await response.json();
-
-      // Commit the Gemini structure response down to client session cache
       sessionStorage.setItem('latest_parsed_exam', JSON.stringify(parsedData));
-
-      setStatusMessage('✓ Parsing complete! Preparing diagnostic layout...');
-      
-      // FIXED: Forces the '?source=upload' parameter flag to prevent empty screens
-      setTimeout(() => {
-        router.push('/reflect?source=upload');
-      }, 800);
-
+      setStatusMessage('Analysis complete. Opening case file...');
+      setTimeout(() => router.push('/reflect?source=upload'), 800);
     } catch (err) {
-      console.error('[upload] File transaction failure:', err);
-      setStatusMessage(err instanceof Error ? err.message : 'Failed to parse file asset.');
+      setStatusMessage(err instanceof Error ? err.message : 'Ingestion failed.');
       setLoading(false);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (loading) return;
-    
-    const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile) {
-      handleFileUpload(droppedFile);
-    }
-  };
-
-  const handleTextChange = (index: number, value: string) => {
-    const updated = [...answers];
-    updated[index] = value;
-    setAnswers(updated);
-  };
+  const sidebarItems = [
+    { icon: 'ti-layout-grid', label: 'Case Files', action: () => router.push('/home') },
+    { icon: 'ti-upload', label: 'New Intake', active: true, action: () => {} },
+    { icon: 'ti-search', label: 'Search', action: () => {} },
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-8">
-      {/* Header */}
-      <h1 className="text-3xl font-bold mb-2">New Entry</h1>
-      <p className="text-gray-400 mb-8">Upload an exam script or write a reflection</p>
+    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
 
-      {/* Tabs */}
-      <div className="flex gap-4 mb-8">
-        <button
-          onClick={() => !loading && setActiveTab('upload')}
-          disabled={loading}
-          className={`px-6 py-2 rounded-full font-medium transition-colors disabled:opacity-50 ${
-            activeTab === 'upload' ? 'bg-white text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          Upload Exam Script
-        </button>
-        <button
-          onClick={() => !loading && setActiveTab('reflect')}
-          disabled={loading}
-          className={`px-6 py-2 rounded-full font-medium transition-colors disabled:opacity-50 ${
-            activeTab === 'reflect' ? 'bg-white text-black' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
-          }`}
-        >
-          Write Reflection
-        </button>
+      {/* Sidebar */}
+      <div style={{ width: 200, background: '#0d0d0b', borderRight: '0.5px solid #1e1e1a', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+        <div style={{ padding: '0 20px 20px', borderBottom: '0.5px solid #1e1e1a', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>
+          <div style={{ fontSize: 10, color: '#2e2e28', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Failure Intelligence</div>
+        </div>
+        {sidebarItems.map(item => (
+          <div key={item.label} onClick={item.action} style={{
+            padding: '8px 20px', fontSize: 13,
+            color: item.active ? '#c8c8c0' : '#5a5a52',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+            borderLeft: item.active ? '2px solid #3a3a30' : '2px solid transparent',
+            background: item.active ? '#111110' : 'transparent',
+          }}>
+            <i className={`ti ${item.icon}`} style={{ fontSize: 15 }} aria-hidden="true" />
+            {item.label}
+          </div>
+        ))}
       </div>
 
-      {/* Upload Tab View */}
-      {activeTab === 'upload' && (
-        <div 
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          className={`border-2 border-dashed rounded-2xl p-16 text-center transition-all ${
-            loading ? 'border-blue-500/50 bg-blue-950/10' : 'border-gray-700 hover:border-gray-600 bg-gray-900/20'
-          }`}
-        >
-          {/* Hidden functional file router system */}
-          <input 
-            type="file"
-            ref={fileInputRef}
-            onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-            accept="image/*,application/pdf"
-            className="hidden"
-          />
+      {/* Main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
-          <p className="text-4xl mb-4">{loading ? '⏳' : '📄'}</p>
-          <p className="text-gray-300 text-lg mb-2">
-            {loading ? 'Analyzing data profiles...' : 'Drop your exam PDF or image here'}
-          </p>
-          
-          {!loading && (
-            <>
-              <p className="text-gray-500 mb-6">or</p>
-              <button 
-                onClick={handleButtonClick}
-                className="bg-white text-black px-6 py-2 rounded-full font-medium hover:bg-gray-200 transition-colors"
-              >
-                Browse Files
-              </button>
-            </>
-          )}
-
-          {statusMessage && (
-            <p className={`text-sm mt-6 font-medium ${statusMessage.startsWith('✓') ? 'text-green-400' : 'text-blue-400 animate-pulse'}`}>
-              {statusMessage}
-            </p>
-          )}
+        {/* Topbar */}
+        <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080808' }}>
+          <div style={{ fontSize: 12, color: '#3a3a30', letterSpacing: '0.06em' }}>
+            case files <span style={{ color: '#5a5a52' }}>/ new intake</span>
+          </div>
         </div>
-      )}
 
-      {/* Manual Reflection Tab View */}
-      {activeTab === 'reflect' && (
-        <div>
-          {submitted ? (
-            <div className="bg-green-900/40 border border-green-500 rounded-2xl p-8 text-center">
-              <p className="text-green-400 text-xl font-medium">✅ Reflection saved!</p>
-              <button
-                onClick={() => { setSubmitted(false); setAnswers(['', '', '']); }}
-                className="mt-4 text-gray-400 underline text-sm"
-              >
-                Write another
+        <div style={{ padding: 40, flex: 1, maxWidth: 720, width: '100%', margin: '0 auto' }}>
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 8 }}>New intake</div>
+            <h1 style={{ fontSize: 22, fontWeight: 500, color: '#c8c8c0', margin: 0 }}>Open a case file</h1>
+            <p style={{ fontSize: 13, color: '#3a3a30', marginTop: 6 }}>Upload a marked exam script or log a manual reflection.</p>
+          </div>
+
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 0, marginBottom: 32, borderBottom: '0.5px solid #1e1e1a' }}>
+            {(['upload', 'reflect'] as const).map(tab => (
+              <button key={tab} onClick={() => !loading && setActiveTab(tab)} style={{
+                padding: '8px 20px', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase',
+                cursor: loading ? 'not-allowed' : 'pointer',
+                background: 'transparent', border: 'none',
+                borderBottom: activeTab === tab ? '1px solid #c8c8c0' : '1px solid transparent',
+                color: activeTab === tab ? '#c8c8c0' : '#3a3a30',
+                marginBottom: -1,
+              }}>
+                {tab === 'upload' ? 'Exam Script' : 'Manual Reflection'}
               </button>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {prompts.map((prompt, index) => (
-                <div key={index} className="bg-gray-900 rounded-2xl p-6 border border-gray-800/40">
-                  <p className="text-gray-300 font-medium mb-3">
-                    {index + 1}. {prompt}
-                  </p>
-                  <textarea
-                    value={answers[index]}
-                    onChange={(e) => handleTextChange(index, e.target.value)}
-                    placeholder="Type your answer here..."
-                    className="w-full bg-gray-800 text-white rounded-xl p-4 h-28 resize-none outline-none focus:ring-2 focus:ring-white/20"
-                  />
+            ))}
+          </div>
+
+          {/* Upload Tab */}
+          {activeTab === 'upload' && (
+            <div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={e => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                accept="image/*,application/pdf"
+                style={{ display: 'none' }}
+              />
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); if (!loading && e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }}
+                onClick={() => !loading && fileInputRef.current?.click()}
+                style={{
+                  border: `0.5px dashed ${dragOver ? '#5a5a52' : '#2e2e28'}`,
+                  borderRadius: 6,
+                  padding: '64px 24px',
+                  textAlign: 'center',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  background: dragOver ? '#0f0f0d' : '#0a0a08',
+                  transition: 'all 0.15s',
+                }}
+              >
+                <i className={`ti ${loading ? 'ti-loader' : 'ti-file-upload'}`} style={{ fontSize: 28, color: '#2e2e28', display: 'block', marginBottom: 16 }} aria-hidden="true" />
+                <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 6 }}>
+                  {loading ? 'Analyzing script...' : 'Drop exam script here'}
                 </div>
-              ))}
-              <button
-                onClick={() => setSubmitted(true)}
-                disabled={answers.every(a => a.trim() === '')}
-                className="bg-white text-black px-8 py-3 rounded-full font-medium hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed self-start"
-              >
-                Save Reflection
-              </button>
+                {!loading && (
+                  <div style={{ fontSize: 11, color: '#2e2e28', marginBottom: 20 }}>PDF, JPG, PNG, WEBP accepted</div>
+                )}
+                {!loading && (
+                  <div style={{
+                    display: 'inline-block', padding: '6px 16px', border: '0.5px solid #2e2e28',
+                    borderRadius: 4, fontSize: 11, color: '#5a5a52', letterSpacing: '0.06em',
+                  }}>
+                    Browse files
+                  </div>
+                )}
+                {statusMessage && (
+                  <div style={{ fontSize: 11, marginTop: 20, fontFamily: 'monospace', color: statusMessage.startsWith('Analysis') ? '#3B6D11' : '#854F0B', letterSpacing: '0.04em' }}>
+                    {statusMessage}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: 24, padding: 16, border: '0.5px solid #1a1a16', borderRadius: 6, background: '#0a0a08' }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>What gets extracted</div>
+                {[
+                  { icon: 'ti-number', label: 'Question numbers and marks lost' },
+                  { icon: 'ti-tag', label: 'Root cause classification (18 categories)' },
+                  { icon: 'ti-vector-triangle', label: 'Pattern tags for relationship map' },
+                ].map(item => (
+                  <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12, color: '#3a3a30' }}>
+                    <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: '#2e2e28' }} aria-hidden="true" />
+                    {item.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Reflect Tab */}
+          {activeTab === 'reflect' && (
+            <div>
+              {submitted ? (
+                <div style={{ border: '0.5px solid #1a2e1a', borderRadius: 6, padding: 32, textAlign: 'center', background: '#0a120a' }}>
+                  <i className="ti ti-check" style={{ fontSize: 24, color: '#3B6D11', display: 'block', marginBottom: 12 }} aria-hidden="true" />
+                  <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 16 }}>Reflection logged.</div>
+                  <button onClick={() => { setSubmitted(false); setAnswers(['', '', '']); }} style={{
+                    background: 'transparent', border: '0.5px solid #2e2e28', color: '#5a5a52',
+                    padding: '6px 16px', borderRadius: 4, fontSize: 11, cursor: 'pointer', letterSpacing: '0.06em',
+                  }}>
+                    Log another
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {prompts.map((prompt, i) => (
+                    <div key={i} style={{ border: '0.5px solid #1e1e1a', borderRadius: 6, padding: 20, background: '#0a0a08' }}>
+                      <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 8 }}>
+                        {String(i + 1).padStart(2, '0')}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 12 }}>{prompt}</div>
+                      <textarea
+                        value={answers[i]}
+                        onChange={e => { const u = [...answers]; u[i] = e.target.value; setAnswers(u); }}
+                        placeholder="Enter response..."
+                        style={{
+                          width: '100%', background: '#080808', border: '0.5px solid #1e1e1a',
+                          color: '#c8c8c0', borderRadius: 4, padding: '10px 12px', fontSize: 12,
+                          fontFamily: 'monospace', resize: 'none', height: 80, outline: 'none',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setSubmitted(true)}
+                    disabled={answers.every(a => a.trim() === '')}
+                    style={{
+                      alignSelf: 'flex-start', background: '#1a1a16', border: '0.5px solid #2e2e28',
+                      color: '#c8c8c0', padding: '8px 20px', borderRadius: 4, fontSize: 12,
+                      cursor: 'pointer', letterSpacing: '0.04em', opacity: answers.every(a => a.trim() === '') ? 0.4 : 1,
+                    }}
+                  >
+                    Commit reflection
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

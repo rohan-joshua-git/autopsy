@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
@@ -10,24 +10,81 @@ interface FailureEntry {
   type: string;
   tags: string[];
   created_at: string;
+  breakdown_data?: { marksDeducted: number }[];
+}
+
+const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  'Calculation Flaw':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Algebraic Slip':               { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Arithmetic Error':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Formula Misapplication':       { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Conceptual Error':             { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Misunderstanding Core Principle': { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Logic Branching Error':        { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Edge Case Neglect':            { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Syntax / Off-by-One':          { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Time Pressure':                { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Incomplete Answer':            { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Rushed Execution':             { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Misreading the Question':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Overlooking Constraints':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Incorrect Assumption':         { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Type Mismatch':                { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Sloppy Handwriting / Notation':{ bg: '#1a1a10', color: '#5F5E5A', border: '#222218' },
+  'Panic / Brain Fade':           { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+};
+
+const DEFAULT_TAG = { bg: '#1a1a16', color: '#5F5E5A', border: '#2e2e28' };
+
+function getTagStyle(tag: string) {
+  return TAG_COLORS[tag] || DEFAULT_TAG;
+}
+
+function getTotalMarksLost(entry: FailureEntry): number {
+  if (!entry.breakdown_data) return 0;
+  return entry.breakdown_data.reduce((sum, q) => sum + (q.marksDeducted || 0), 0);
+}
+
+function SeverityBar({ marks }: { marks: number }) {
+  const level = marks >= 15 ? 5 : marks >= 10 ? 4 : marks >= 6 ? 3 : marks >= 3 ? 2 : 1;
+  const color = level >= 4 ? '#993C1D' : level >= 3 ? '#854F0B' : '#3B6D11';
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 2 }}>
+        {[1,2,3,4,5].map(i => (
+          <div key={i} style={{
+            width: 6, height: 14, borderRadius: 1,
+            background: i <= level ? color : '#1a1a16'
+          }} />
+        ))}
+      </div>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color }}>{marks > 0 ? `−${marks}` : '—'}</span>
+    </div>
+  );
+}
+
+function PatternBar({ count, max }: { count: number; max: number }) {
+  return (
+    <div style={{ height: 2, background: '#1a1a16', borderRadius: 1, marginTop: 4 }}>
+      <div style={{ height: 2, background: '#3a3a30', borderRadius: 1, width: `${Math.round((count / max) * 100)}%` }} />
+    </div>
+  );
 }
 
 export default function HomePage() {
   const router = useRouter();
   const [entries, setEntries] = useState<FailureEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<'all' | 'exam' | 'reflection'>('all');
 
   useEffect(() => {
     async function load() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        router.push('/login');
-        return;
-      }
+      if (authError || !user) { router.push('/login'); return; }
 
       const { data } = await supabase
         .from('failures')
-        .select('id, title, type, tags, created_at')
+        .select('id, title, type, tags, created_at, breakdown_data')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -37,72 +94,224 @@ export default function HomePage() {
     load();
   }, [router]);
 
+  const filtered = entries.filter(e => {
+    if (filter === 'exam') return e.type === 'Exam Script';
+    if (filter === 'reflection') return e.type !== 'Exam Script';
+    return true;
+  });
+
+  // Pattern frequency
+  const patternCounts: Record<string, number> = {};
+  entries.forEach(e => (e.tags || []).forEach(t => { patternCounts[t] = (patternCounts[t] || 0) + 1; }));
+  const topPatterns = Object.entries(patternCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const maxPattern = topPatterns[0]?.[1] || 1;
+
+  const totalMarksLost = entries.reduce((sum, e) => sum + getTotalMarksLost(e), 0);
+  const openCases = entries.filter(e => !e.breakdown_data || e.breakdown_data.length === 0).length;
+
+  // Red flag: any tag appearing 3+ times
+  const redFlagTag = Object.entries(patternCounts).find(([, count]) => count >= 3)?.[0];
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <p className="text-gray-500 text-sm animate-pulse">Loading your library...</p>
+      <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
+        LOADING CASE FILES...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold">Your Failure Library</h1>
-          <p className="text-gray-400 mt-1">Track and learn from every mistake</p>
+    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
+
+      {/* Sidebar */}
+      <div style={{ width: 200, background: '#0d0d0b', borderRight: '0.5px solid #1e1e1a', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+        <div style={{ padding: '0 20px 20px', borderBottom: '0.5px solid #1e1e1a', marginBottom: 12 }}>
+          <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>
+          <div style={{ fontSize: 10, color: '#2e2e28', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Failure Intelligence</div>
         </div>
-        <button
-          onClick={() => router.push('/upload')}
-          className="bg-white text-black px-6 py-2.5 rounded-full font-semibold hover:bg-gray-200 transition-colors"
-        >
-          + New Entry
-        </button>
+        {[
+          { icon: 'ti-layout-grid', label: 'Case Files', active: true, action: () => {} },
+          { icon: 'ti-upload', label: 'New Intake', active: false, action: () => router.push('/upload') },
+          { icon: 'ti-search', label: 'Search', active: false, action: () => {} },
+        ].map(item => (
+          <div key={item.label} onClick={item.action} style={{
+            padding: '8px 20px', fontSize: 13, color: item.active ? '#c8c8c0' : '#5a5a52',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
+            borderLeft: item.active ? '2px solid #3a3a30' : '2px solid transparent',
+            background: item.active ? '#111110' : 'transparent',
+          }}>
+            <i className={`ti ${item.icon}`} style={{ fontSize: 15 }} aria-hidden="true" />
+            {item.label}
+          </div>
+        ))}
+        <div style={{ marginTop: 'auto' }}>
+          <div onClick={() => supabase.auth.signOut().then(() => router.push('/login'))} style={{
+            padding: '8px 20px', fontSize: 13, color: '#3a3a30', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 10, borderLeft: '2px solid transparent',
+          }}>
+            <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true" />
+            Sign out
+          </div>
+        </div>
       </div>
 
-      {/* Grid */}
-      {entries.length === 0 ? (
-        <div className="border-2 border-dashed border-gray-800 rounded-2xl p-16 text-center">
-          <p className="text-4xl mb-4">📭</p>
-          <p className="text-gray-400 mb-2">No entries yet</p>
-          <p className="text-gray-600 text-sm mb-6">Upload your first exam script to get started</p>
-          <button
-            onClick={() => router.push('/upload')}
-            className="bg-white text-black px-6 py-2 rounded-full font-medium hover:bg-gray-200 transition-colors"
-          >
-            Upload Exam Script
+      {/* Main */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Topbar */}
+        <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080808' }}>
+          <div style={{ fontSize: 12, color: '#3a3a30', letterSpacing: '0.06em' }}>
+            case files <span style={{ color: '#5a5a52' }}>/ all</span>
+          </div>
+          <button onClick={() => router.push('/upload')} style={{
+            background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#c8c8c0',
+            padding: '7px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6, letterSpacing: '0.04em',
+          }}>
+            <i className="ti ti-plus" style={{ fontSize: 13 }} aria-hidden="true" />
+            New intake
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              onClick={() => router.push(`/reflect?id=${entry.id}`)}
-              className="bg-gray-900 border border-gray-800 rounded-2xl p-5 cursor-pointer hover:border-gray-600 transition-all space-y-3"
-            >
-              <div className="flex justify-between items-start">
-                <h2 className="font-semibold text-white truncate pr-2">{entry.title}</h2>
-                <span className="text-xs text-gray-500 shrink-0">
-                  {new Date(entry.created_at).toLocaleDateString()}
-                </span>
+
+        <div style={{ padding: 24, flex: 1, overflowY: 'auto' }}>
+
+          {/* Stats */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, marginBottom: 24, background: '#1a1a16', border: '0.5px solid #1a1a16', borderRadius: 6, overflow: 'hidden' }}>
+            {[
+              { label: 'Total cases', value: entries.length, sub: `${entries.length === 1 ? '1 entry' : `${entries.length} entries`}` },
+              { label: 'Marks lost', value: totalMarksLost, sub: 'across all scripts' },
+              { label: 'Top pattern', value: topPatterns[0]?.[0]?.split(' ')[0] ?? '—', sub: topPatterns[0] ? `${topPatterns[0][1]} occurrences` : 'no data yet' },
+              { label: 'Open cases', value: openCases, sub: 'pending reflection' },
+            ].map(stat => (
+              <div key={stat.label} style={{ background: '#0d0d0b', padding: 16 }}>
+                <div style={{ fontSize: 10, color: '#3a3a30', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: 6 }}>{stat.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 500, color: '#c8c8c0' }}>{stat.value}</div>
+                <div style={{ fontSize: 11, color: '#3a3a30', marginTop: 3 }}>{stat.sub}</div>
               </div>
-              <p className="text-xs text-gray-500">{entry.type}</p>
-              <div className="flex gap-2 flex-wrap">
-                {entry.tags?.slice(0, 3).map((tag) => (
-                  <span key={tag} className="text-xs bg-gray-800 border border-gray-700 text-gray-400 px-2 py-0.5 rounded-full">
-                    {tag}
-                  </span>
-                ))}
-                {entry.tags?.length > 3 && (
-                  <span className="text-xs text-gray-600">+{entry.tags.length - 3} more</span>
-                )}
+            ))}
+          </div>
+
+          {/* Filters */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {(['all', 'exam', 'reflection'] as const).map(f => (
+              <button key={f} onClick={() => setFilter(f)} style={{
+                padding: '4px 12px', borderRadius: 3, fontSize: 11, letterSpacing: '0.06em',
+                cursor: 'pointer', border: '0.5px solid',
+                borderColor: filter === f ? '#3a3a30' : '#1e1e1a',
+                color: filter === f ? '#a8a8a0' : '#3a3a30',
+                background: filter === f ? '#111110' : 'transparent',
+              }}>
+                {f === 'all' ? 'All' : f === 'exam' ? 'Exam scripts' : 'Reflections'}
+              </button>
+            ))}
+          </div>
+
+          {/* Table */}
+          {filtered.length === 0 ? (
+            <div style={{ border: '0.5px dashed #1e1e1a', borderRadius: 6, padding: '60px 24px', textAlign: 'center' }}>
+              <div style={{ fontSize: 12, color: '#2e2e28', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>No cases on file</div>
+              <div style={{ fontSize: 12, color: '#3a3a30', marginBottom: 20 }}>Upload your first exam script to open a case.</div>
+              <button onClick={() => router.push('/upload')} style={{
+                background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#a8a8a0',
+                padding: '8px 20px', borderRadius: 4, fontSize: 12, cursor: 'pointer', letterSpacing: '0.04em',
+              }}>
+                Open first case
+              </button>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Case ID', 'Subject', 'Root causes', 'Severity', 'Date'].map(h => (
+                    <th key={h} style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', padding: '8px 12px', textAlign: 'left', borderBottom: '0.5px solid #1a1a16' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((entry, idx) => {
+                  const marks = getTotalMarksLost(entry);
+                  const caseNum = String(entries.length - entries.indexOf(entry)).padStart(4, '0');
+                  return (
+                    <tr key={entry.id} onClick={() => router.push(`/reflect?id=${entry.id}`)} style={{ cursor: 'pointer' }}
+                      onMouseEnter={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(c => { (c as HTMLTableCellElement).style.background = '#0f0f0d'; (c as HTMLTableCellElement).style.color = '#c8c8c0'; })}
+                      onMouseLeave={e => Array.from((e.currentTarget as HTMLTableRowElement).cells).forEach(c => { (c as HTMLTableCellElement).style.background = ''; (c as HTMLTableCellElement).style.color = ''; })}
+                    >
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110', fontFamily: 'monospace', fontSize: 11, color: '#3a3a30' }}>#{caseNum}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110', fontSize: 13, color: '#a8a8a0' }}>{entry.title}</td>
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110' }}>
+                        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                          {(entry.tags || []).slice(0, 2).map(tag => {
+                            const s = getTagStyle(tag);
+                            return (
+                              <span key={tag} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, letterSpacing: '0.06em', background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
+                                {tag}
+                              </span>
+                            );
+                          })}
+                          {(entry.tags || []).length > 2 && <span style={{ fontSize: 10, color: '#3a3a30' }}>+{entry.tags.length - 2}</span>}
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110' }}>
+                        <SeverityBar marks={marks} />
+                      </td>
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110', fontSize: 11, fontFamily: 'monospace', color: '#3a3a30' }}>
+                        {new Date(entry.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* Right panel */}
+      <div style={{ width: 200, padding: '24px 16px', borderLeft: '0.5px solid #1e1e1a', background: '#0a0a08', display: 'flex', flexDirection: 'column', gap: 24, flexShrink: 0 }}>
+
+        {/* Top patterns */}
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Top patterns</div>
+          {topPatterns.length === 0 ? (
+            <div style={{ fontSize: 11, color: '#2e2e28' }}>No data yet</div>
+          ) : topPatterns.map(([tag, count]) => (
+            <div key={tag} style={{ paddingBottom: 8, marginBottom: 8, borderBottom: '0.5px solid #111110' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: 11, color: '#5a5a52' }}>{tag}</div>
+                <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#3a3a30' }}>{count}</div>
               </div>
+              <PatternBar count={count} max={maxPattern} />
             </div>
           ))}
         </div>
-      )}
+
+        {/* Recent activity */}
+        <div>
+          <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Recent activity</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {entries.slice(0, 3).map(e => (
+              <div key={e.id} style={{ fontSize: 11, color: '#3a3a30', borderLeft: '2px solid #1e1e1a', paddingLeft: 8 }}>
+                <div style={{ color: '#5a5a52' }}>{e.title}</div>
+                <div style={{ marginTop: 2 }}>{new Date(e.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Red flag */}
+        {redFlagTag && (
+          <div>
+            <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Red flags</div>
+            <div style={{ background: '#1a0800', border: '0.5px solid #2a1000', borderRadius: 4, padding: 10 }}>
+              <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <i className="ti ti-alert-triangle" style={{ fontSize: 13 }} aria-hidden="true" />
+                Pattern repeat
+              </div>
+              <div style={{ fontSize: 11, color: '#3a3a30' }}>{redFlagTag} detected {patternCounts[redFlagTag]}x.</div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
