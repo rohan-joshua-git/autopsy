@@ -42,7 +42,7 @@ const examAnalysisSchema: Schema = {
           marksLost: { type: Type.INTEGER },
           rootCause: { 
             type: Type.STRING, 
-            enum: TAXONOMY,
+            enum: [...TAXONOMY],
             description: "Must match exactly one category from our error taxonomy matrix."
           },
           explanation: { type: Type.STRING }
