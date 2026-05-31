@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
@@ -18,15 +18,13 @@ export default function UploadPage() {
   const [statusMessage, setStatusMessage] = useState('');
   const [answers, setAnswers] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const router = useRouter();
 
-  const prompts = [
-    "What was the main thing that went wrong?",
-    "What were you feeling before this exam?",
-    "What would you do differently?",
-  ];
+  const handleChange = (index: number, value: string) => {
+    const updated = [...answers];
+    updated[index] = value;
+    setAnswers(updated);
+  };
 
   const handleFileUpload = async (file: File) => {
     if (!file) return;
@@ -104,13 +102,33 @@ export default function UploadPage() {
       </div>
 
       {activeTab === 'upload' && (
-        <div className="border-2 border-dashed border-gray-700 rounded-2xl p-16 text-center">
+        <div
+          className="border-2 border-dashed border-gray-700 rounded-2xl p-16 text-center cursor-pointer hover:border-gray-500 transition-colors"
+          onClick={() => fileInputRef.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) handleFileUpload(file);
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+            }}
+          />
           <p className="text-4xl mb-4">📄</p>
           <p className="text-gray-300 text-lg mb-2">Drop your exam PDF here</p>
           <p className="text-gray-500 mb-6">or</p>
           <button className="bg-white text-black px-6 py-2 rounded-full font-medium hover:bg-gray-200 transition-colors">
             Upload Exam Script
           </button>
+          {statusMessage && <p className="text-gray-400 text-sm mt-4">{statusMessage}</p>}
         </div>
       )}
 
@@ -160,7 +178,7 @@ export default function UploadPage() {
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }
