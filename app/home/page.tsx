@@ -4,12 +4,34 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../../lib/supabase';
 
-const TAG_COLOURS: Record<string, string> = {
-  'Logic Flaw': 'bg-red-900 text-red-300',
-  'Time Pressure': 'bg-orange-900 text-orange-300',
-  'Edge Case Neglect': 'bg-yellow-900 text-yellow-300',
-  'Under-tested': 'bg-purple-900 text-purple-300',
-  'Conceptual Error': 'bg-blue-900 text-blue-300',
+interface FailureEntry {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  created_at: string;
+  breakdown_data?: { marksDeducted: number }[];
+}
+
+const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  'Calculation Flaw':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Algebraic Slip':               { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Arithmetic Error':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
+  'Formula Misapplication':       { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Conceptual Error':             { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Misunderstanding Core Principle': { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
+  'Logic Branching Error':        { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Edge Case Neglect':            { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Syntax / Off-by-One':          { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Time Pressure':                { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Incomplete Answer':            { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Rushed Execution':             { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
+  'Misreading the Question':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Overlooking Constraints':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Incorrect Assumption':         { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
+  'Type Mismatch':                { bg: '#1a1028', color: '#534AB7', border: '#221438' },
+  'Sloppy Handwriting / Notation':{ bg: '#1a1a10', color: '#5F5E5A', border: '#222218' },
+  'Panic / Brain Fade':           { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
 };
 
 type Entry = {

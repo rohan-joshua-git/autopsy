@@ -11,17 +11,40 @@ const prompts = [
 ];
 
 export default function UploadPage() {
-  const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('reflect');
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('upload');
+  const [loading, setLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
   const [answers, setAnswers] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const router = useRouter();
 
-  const handleChange = (index: number, value: string) => {
-    const updated = [...answers];
-    updated[index] = value;
-    setAnswers(updated);
+  const prompts = [
+    "What was the main thing that went wrong?",
+    "What were you feeling before this exam?",
+    "What would you do differently?",
+  ];
+
+  const handleFileUpload = async (file: File) => {
+    if (!file) return;
+    setLoading(true);
+    setStatusMessage('Ingesting file...');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch('/api/parse-exam', { method: 'POST', body: formData });
+      if (!response.ok) throw new Error(`Parser returned status: ${response.status}`);
+      const parsedData = await response.json();
+      sessionStorage.setItem('latest_parsed_exam', JSON.stringify(parsedData));
+      setStatusMessage('Analysis complete. Opening case file...');
+      setTimeout(() => router.push('/reflect?source=upload'), 800);
+    } catch (err) {
+      setStatusMessage(err instanceof Error ? err.message : 'Ingestion failed.');
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -137,7 +160,7 @@ export default function UploadPage() {
             </div>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
