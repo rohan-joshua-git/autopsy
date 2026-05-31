@@ -18,7 +18,7 @@ const ExamEntrySchema = z.object({
   maxMarks: z.number(),
   marksAwarded: z.number(),
   marksLost: z.number(),
-  rootCause: z.enum(TAXONOMY as [string, ...string[]]),
+  rootCause: z.enum([...TAXONOMY] as [string, ...string[]]),
   explanation: z.string(),
 })
 
