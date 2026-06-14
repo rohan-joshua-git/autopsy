@@ -3,14 +3,18 @@
 import { useEffect, useRef } from 'react';
 import cytoscape from 'cytoscape';
 
-const DEMO_DATA = [
-  { id: 'e1', title: 'Math Paper 1', tags: ['Calculation Flaw', 'Algebraic Slip'] },
-  { id: 'e2', title: 'Physics Mock', tags: ['Calculation Flaw', 'Formula Misapplication'] },
-  { id: 'e3', title: 'CS Assignment', tags: ['Logic Branching Error', 'Edge Case Neglect'] },
-  { id: 'e4', title: 'Math Paper 2', tags: ['Algebraic Slip', 'Misreading the Question'] },
-  { id: 'e5', title: 'Chemistry Test', tags: ['Formula Misapplication', 'Incomplete Answer'] },
-  { id: 'e6', title: 'Project Sprint', tags: ['Time Pressure', 'Edge Case Neglect'] },
-];
+interface RealFailureEntry {
+  id: string;
+  module_code: string;
+  assessment_name: string;
+  question_number: string;
+  error_category: string;
+  marks_deducted: number;
+}
+
+interface GraphViewProps {
+  entries: RealFailureEntry[];
+}
 
 const TAG_COLORS: Record<string, string> = {
   'Calculation Flaw': '#378ADD',
@@ -29,37 +33,46 @@ const TAG_COLORS: Record<string, string> = {
   'Overlooking Constraints': '#1D9E75',
 };
 
-export default function GraphView() {
+export default function GraphView({ entries }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || entries.length === 0) return;
 
     const elements: cytoscape.ElementDefinition[] = [];
 
-    DEMO_DATA.forEach((entry) => {
+    entries.forEach((entry) => {
       elements.push({
-        data: { id: entry.id, label: entry.title, type: 'failure' },
+        data: { 
+          id: entry.id, 
+          label: `${entry.module_code}\n${entry.assessment_name} (${entry.question_number})`, 
+          type: 'failure' 
+        },
       });
     });
 
-    const tagSet = new Set(DEMO_DATA.flatMap((e) => e.tags));
-    tagSet.forEach((tag) => {
+    const uniqueCategories = new Set(entries.map((e) => e.error_category).filter(Boolean));
+    uniqueCategories.forEach((category) => {
       elements.push({
-        data: { id: `tag-${tag}`, label: tag, type: 'tag', color: TAG_COLORS[tag] || '#888780' },
+        data: { 
+          id: `tag-${category}`, 
+          label: category, 
+          type: 'tag', 
+          color: TAG_COLORS[category] || '#888780' 
+        },
       });
     });
 
-    DEMO_DATA.forEach((entry) => {
-      entry.tags.forEach((tag) => {
+    entries.forEach((entry) => {
+      if (entry.error_category) {
         elements.push({
           data: {
-            id: `${entry.id}-${tag}`,
+            id: `edge-${entry.id}-${entry.error_category}`,
             source: entry.id,
-            target: `tag-${tag}`,
+            target: `tag-${entry.error_category}`,
           },
         });
-      });
+      }
     });
 
     const cy = cytoscape({
@@ -72,14 +85,14 @@ export default function GraphView() {
             'background-color': '#2C2C2A',
             'label': 'data(label)',
             'color': '#D3D1C7',
-            'font-size': '11px',
+            'font-size': '10px',
             'text-valign': 'center',
             'text-halign': 'center',
-            'width': 90,
-            'height': 36,
+            'width': 100,
+            'height': 40,
             'shape': 'roundrectangle',
             'text-wrap': 'wrap',
-            'text-max-width': '80px',
+            'text-max-width': '90px',
           },
         },
         {
@@ -91,17 +104,17 @@ export default function GraphView() {
             'font-size': '10px',
             'text-valign': 'center',
             'text-halign': 'center',
-            'width': 110,
+            'width': 120,
             'height': 32,
             'shape': 'roundrectangle',
             'text-wrap': 'wrap',
-            'text-max-width': '100px',
+            'text-max-width': '110px',
           },
         },
         {
           selector: 'edge',
           style: {
-            'width': 1,
+            'width': 1.5,
             'line-color': '#444441',
             'curve-style': 'bezier',
           },
@@ -117,9 +130,9 @@ export default function GraphView() {
       layout: {
         name: 'cose',
         animate: false,
-        padding: 30,
-        nodeRepulsion: () => 8000,
-        idealEdgeLength: () => 80,
+        padding: 40,
+        nodeRepulsion: () => 10000,
+        idealEdgeLength: () => 90,
       },
     });
 
@@ -129,20 +142,26 @@ export default function GraphView() {
     });
 
     return () => cy.destroy();
-  }, []);
+  }, [entries]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-sm font-semibold text-gray-300">Failure Relationship Map</h2>
-        <span className="text-xs text-gray-600 bg-gray-900 border border-gray-800 px-2 py-0.5 rounded-full">Demo Data</span>
+        {entries.length === 0 && (
+          <span className="text-xs text-yellow-600 bg-yellow-950/30 border border-yellow-900/50 px-2 py-0.5 rounded-full">
+            No entries logged yet
+          </span>
+        )}
       </div>
       <div
         ref={containerRef}
         className="w-full rounded-2xl border border-gray-800 bg-gray-900"
-        style={{ height: '380px' }}
+        style={{ height: '400px' }}
       />
-      <p className="text-xs text-gray-600 mt-2">Nodes = exam entries · Coloured clusters = shared error tags · Click a node to highlight connections</p>
+      <p className="text-xs text-gray-600 mt-2">
+        Nodes = questions · Coloured labels = behavioral taxonomy matrix targets · Clusters isolate common recurring blind spots
+      </p>
     </div>
   );
 }

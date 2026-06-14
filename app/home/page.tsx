@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import GraphView from './GraphView';
 
 interface FailureEntry {
   id: string;
@@ -12,6 +13,15 @@ interface FailureEntry {
   created_at: string;
   answers?: string[];
   breakdown_data?: { marksDeducted: number }[];
+}
+
+interface VectorSearchResult {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  reflection_notes: string;
+  similarity: number;
 }
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -75,6 +85,12 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'exam' | 'reflection'>('all');
 
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<VectorSearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+
   useEffect(() => {
     async function load() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -91,6 +107,29 @@ export default function HomePage() {
     load();
   }, [router]);
 
+  const handleSearchSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+
+    setIsSearching(true);
+    setSearchError('');
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: searchQuery, limit: 5 }),
+      });
+
+      if (!res.ok) throw new Error('Failed to fetch semantic search matches.');
+      const data = await res.json();
+      setSearchResults(data.matches || []);
+    } catch (err: any) {
+      setSearchError(err.message || 'Error conducting similarity search.');
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const filtered = entries.filter(e => {
     if (filter === 'exam') return e.type === 'Exam Script';
     if (filter === 'reflection') return e.type !== 'Exam Script';
@@ -105,6 +144,17 @@ export default function HomePage() {
   const openCases = entries.filter(e => !e.breakdown_data || e.breakdown_data.length === 0).length;
   const redFlagTag = Object.entries(patternCounts).find(([, count]) => count >= 3)?.[0];
 
+  const graphCompatibleEntries = entries.flatMap(entry => {
+    return (entry.tags || []).map(tag => ({
+      id: `${entry.id}-${tag}`,
+      module_code: entry.title?.split(' ')[0] || 'Unknown',
+      assessment_name: entry.title || entry.type || 'Assessment',
+      question_number: tag.split(' ')[0] || 'Error',
+      error_category: tag,
+      marks_deducted: getTotalMarksLost(entry)
+    }));
+  });
+
   if (loading) {
     return (
       <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
@@ -114,26 +164,26 @@ export default function HomePage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
+    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)', position: 'relative', overflow: 'hidden' }}>
 
-      {/* Sidebar */}
+      {/* Sidebar Navigation */}
       <div style={{ width: 200, background: '#0d0d0b', borderRight: '0.5px solid #1e1e1a', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
         <div style={{ padding: '0 20px 20px', borderBottom: '0.5px solid #1e1e1a', marginBottom: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>
           <div style={{ fontSize: 10, color: '#2e2e28', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Failure Intelligence</div>
         </div>
         {[
-          { icon: 'ti-layout-grid', label: 'Case Files', active: true, action: () => {} },
+          { icon: 'ti-layout-grid', label: 'Case Files', active: !isSearchOpen, action: () => setIsSearchOpen(false) },
           { icon: 'ti-upload', label: 'New Intake', action: () => router.push('/upload') },
           { icon: 'ti-flask', label: 'POC Demo', action: () => router.push('/poc') },
-          { icon: 'ti-search', label: 'Search', action: () => {} },
+          { icon: 'ti-search', label: 'Search', active: isSearchOpen, action: () => setIsSearchOpen(true) },
         ].map(item => (
           <div key={item.label} onClick={item.action} style={{
             padding: '8px 20px', fontSize: 13,
-            color: (item as any).active ? '#c8c8c0' : '#5a5a52',
+            color: item.active ? '#c8c8c0' : '#5a5a52',
             cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-            borderLeft: (item as any).active ? '2px solid #3a3a30' : '2px solid transparent',
-            background: (item as any).active ? '#111110' : 'transparent',
+            borderLeft: item.active ? '2px solid #3a3a30' : '2px solid transparent',
+            background: item.active ? '#111110' : 'transparent',
           }}>
             <i className={`ti ${item.icon}`} style={{ fontSize: 15 }} aria-hidden="true" />
             {item.label}
@@ -150,10 +200,9 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Main */}
+      {/* Main Container Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* Topbar */}
         <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080808' }}>
           <div style={{ fontSize: 12, color: '#3a3a30', letterSpacing: '0.06em' }}>
             case files <span style={{ color: '#5a5a52' }}>/ all</span>
@@ -170,7 +219,6 @@ export default function HomePage() {
 
         <div style={{ padding: 24, flex: 1, overflowY: 'auto' }}>
 
-          {/* Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, marginBottom: 24, background: '#1a1a16', border: '0.5px solid #1a1a16', borderRadius: 6, overflow: 'hidden' }}>
             {[
               { label: 'Total cases', value: entries.length, sub: `${entries.length === 1 ? '1 entry' : `${entries.length} entries`}` },
@@ -186,7 +234,10 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Filters */}
+          <div style={{ background: '#0d0d0b', border: '0.5px solid #1e1e1a', borderRadius: 6, padding: 20, marginBottom: 24 }}>
+            <GraphView entries={graphCompatibleEntries} />
+          </div>
+
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             {(['all', 'exam', 'reflection'] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)} style={{
@@ -201,7 +252,6 @@ export default function HomePage() {
             ))}
           </div>
 
-          {/* Table */}
           {filtered.length === 0 ? (
             <div style={{ border: '0.5px dashed #1e1e1a', borderRadius: 6, padding: '60px 24px', textAlign: 'center' }}>
               <div style={{ fontSize: 12, color: '#2e2e28', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 12 }}>No cases on file</div>
@@ -263,7 +313,7 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Right panel */}
+      {/* Right Column Context Panel */}
       <div style={{ width: 200, padding: '24px 16px', borderLeft: '0.5px solid #1e1e1a', background: '#0a0a08', display: 'flex', flexDirection: 'column', gap: 24, flexShrink: 0 }}>
         <div>
           <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Top patterns</div>
@@ -305,6 +355,103 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Slide-out Semantic Vector Search Panel Layer */}
+      <div style={{
+        position: 'absolute', top: 0, right: 0, bottom: 0,
+        width: 440, background: '#0d0d0b', borderLeft: '0.5px solid #1e1e1a',
+        transform: isSearchOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        zIndex: 100, display: 'flex', flexDirection: 'column',
+        boxShadow: '-10px 0 30px rgba(0,0,0,0.5)'
+      }}>
+        <div style={{ padding: '24px 24px 16px', borderBottom: '0.5px solid #1e1e1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.04em' }}>Semantic Latent Search</div>
+            <div style={{ fontSize: 10, color: '#5a5a52', marginTop: 2 }}>Query case archives using natural language vector math</div>
+          </div>
+          <button onClick={() => setIsSearchOpen(false)} style={{ background: 'transparent', border: 'none', color: '#3a3a30', cursor: 'pointer', fontSize: 16 }}>
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div style={{ padding: 24, borderBottom: '0.5px solid #1e1e1a' }}>
+          <form onSubmit={handleSearchSubmit} style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="e.g., dynamic programming complexity slips..."
+              style={{
+                flex: 1, background: '#080808', border: '0.5px solid #2e2e28',
+                color: '#c8c8c0', borderRadius: 4, padding: '8px 12px', fontSize: 12,
+                outline: 'none', fontFamily: 'monospace'
+              }}
+            />
+            <button
+              type="submit"
+              disabled={isSearching || !searchQuery.trim()}
+              style={{
+                background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#c8c8c0',
+                padding: '0 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer',
+                opacity: isSearching || !searchQuery.trim() ? 0.5 : 1
+              }}
+            >
+              {isSearching ? 'Matching...' : 'Query'}
+            </button>
+          </form>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {searchError && (
+            <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#993C1D' }}>{searchError}</div>
+          )}
+
+          {!isSearching && searchResults.length === 0 && !searchError && (
+            <div style={{ fontSize: 11, color: '#3a3a30', fontFamily: 'monospace', textAlign: 'center', marginTop: 40 }}>
+              ENTER COGNITIVE PATTERN QUERY TO MATCH EMBEDDINGS
+            </div>
+          )}
+
+          {searchResults.map(match => (
+            <div
+              key={match.id}
+              onClick={() => { setIsSearchOpen(false); router.push(`/reflect?id=${match.id}`); }}
+              style={{
+                background: '#080808', border: '0.5px solid #1e1e1a', borderRadius: 4,
+                padding: 16, cursor: 'pointer', transition: 'border-color 0.15s'
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#3a3a30'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#1e1e1a'}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <span style={{ fontSize: 13, fontWeight: 500, color: '#a8a8a0' }}>{match.title}</span>
+                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#3B6D11', background: '#0a1a0c', padding: '1px 6px', borderRadius: 3, border: '0.5px solid #0c200e' }}>
+                  {(match.similarity * 100).toFixed(1)}% Match
+                </span>
+              </div>
+              
+              <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
+                {(match.tags || []).map(t => {
+                  const s = getTagStyle(t);
+                  return (
+                    <span key={t} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 2, background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
+                      {t}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {match.reflection_notes && (
+                <p style={{ fontSize: 11, color: '#5a5a52', margin: 0, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {match.reflection_notes}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
     </div>
   );
 }

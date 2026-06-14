@@ -49,24 +49,34 @@ export default function UploadPage() {
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/login'); return; }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { router.push('/login'); return; }
+      const aggregatedProfileText = prompts
+        .map((p, idx) => `${p}\nResponse: ${answers[idx]}`)
+        .join('\n\n');
 
-    const { error: dbError } = await supabase.from('failures').insert({
-      user_id: user.id,
-      type: 'reflection',
-      answers,
-      tags: [],
-    });
+      const response = await fetch('/api/parse-manual-reflection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          text: aggregatedProfileText,
+          breakdownData: answers
+        }),
+      });
 
-    if (dbError) {
-      setError('Something went wrong saving your reflection. Please try again.');
-      console.error(dbError);
-    } else {
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Failed to save reflection.');
+      
       setSubmitted(true);
+    } catch (err: any) {
+      setError(err.message);
+      console.error(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const sidebarItems = [
@@ -78,8 +88,6 @@ export default function UploadPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
-
-      {/* Sidebar */}
       <div style={{ width: 200, background: '#0d0d0b', borderRight: '0.5px solid #1e1e1a', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
         <div style={{ padding: '0 20px 20px', borderBottom: '0.5px solid #1e1e1a', marginBottom: 12 }}>
           <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>
@@ -108,10 +116,7 @@ export default function UploadPage() {
         </div>
       </div>
 
-      {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-
-        {/* Topbar */}
         <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080808' }}>
           <div style={{ fontSize: 12, color: '#3a3a30', letterSpacing: '0.06em' }}>
             case files <span style={{ color: '#5a5a52' }}>/ new intake</span>
@@ -125,7 +130,6 @@ export default function UploadPage() {
             <p style={{ fontSize: 13, color: '#3a3a30', marginTop: 6 }}>Upload a marked exam script or log a manual reflection.</p>
           </div>
 
-          {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, marginBottom: 32, borderBottom: '0.5px solid #1e1e1a' }}>
             {(['upload', 'reflect'] as const).map(tab => (
               <button key={tab} onClick={() => !loading && setActiveTab(tab)} style={{
@@ -141,7 +145,6 @@ export default function UploadPage() {
             ))}
           </div>
 
-          {/* Upload Tab */}
           {activeTab === 'upload' && (
             <div>
               <input
@@ -180,24 +183,9 @@ export default function UploadPage() {
                   </div>
                 )}
               </div>
-
-              <div style={{ marginTop: 24, padding: 16, border: '0.5px solid #1a1a16', borderRadius: 6, background: '#0a0a08' }}>
-                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>What gets extracted</div>
-                {[
-                  { icon: 'ti-number', label: 'Question numbers and marks lost' },
-                  { icon: 'ti-tag', label: 'Root cause classification (18 categories)' },
-                  { icon: 'ti-vector-triangle', label: 'Pattern tags for relationship map' },
-                ].map(item => (
-                  <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 0', fontSize: 12, color: '#3a3a30' }}>
-                    <i className={`ti ${item.icon}`} style={{ fontSize: 14, color: '#2e2e28' }} aria-hidden="true" />
-                    {item.label}
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
-          {/* Reflect Tab */}
           {activeTab === 'reflect' && (
             <div>
               {submitted ? (
@@ -241,13 +229,11 @@ export default function UploadPage() {
                       />
                     </div>
                   ))}
-
                   {error && (
                     <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D', letterSpacing: '0.04em' }}>
                       {error}
                     </div>
                   )}
-
                   <button
                     onClick={handleSubmit}
                     disabled={loading || answers.every(a => a.trim() === '')}
