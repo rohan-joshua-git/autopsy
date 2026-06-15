@@ -14,7 +14,12 @@ export default function ReflectPage() {
   const [saving, setSaving] = useState(false);
 
   const loadEntry = useCallback(async () => {
-    if (!id) return;
+    // If no ID, redirect back to home or show an error
+    if (!id) {
+      router.push('/home');
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('failures')
       .select('*')
@@ -26,7 +31,7 @@ export default function ReflectPage() {
       setNotes(data.reflection_notes || '');
     }
     setLoading(false);
-  }, [id]);
+  }, [id, router]);
 
   useEffect(() => {
     loadEntry();
