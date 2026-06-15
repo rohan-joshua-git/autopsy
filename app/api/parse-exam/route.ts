@@ -1,11 +1,12 @@
+import { TAXONOMY } from '@/lib/taxonomy';
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI, Type, Schema } from '@google/genai';
+import { GoogleGenAI, Type } from '@google/genai';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
-const examAnalysisSchema: Schema = {
+const examAnalysisSchema = {
   type: Type.OBJECT,
   properties: {
     entries: {
@@ -17,7 +18,10 @@ const examAnalysisSchema: Schema = {
           marksLost: { type: Type.INTEGER },
           rootCause: { type: Type.STRING },
           explanation: { type: Type.STRING },
-          tags: { type: Type.ARRAY, items: { type: Type.STRING } }
+          tags: { 
+            type: Type.ARRAY, 
+            items: { type: Type.STRING, enum: TAXONOMY } 
+          }
         },
         required: ["questionNumber", "marksLost", "rootCause", "explanation", "tags"]
       }
@@ -25,6 +29,25 @@ const examAnalysisSchema: Schema = {
   },
   required: ["entries"]
 };
+
+async function callGeminiWithRetry<T>(operation: () => Promise<T>, retries = 3): Promise<T> {
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      return await operation();
+    } catch (err: any) {
+      const isTransient = [429, 500, 503, 504].includes(err.status);
+      if (isTransient && attempt < retries) {
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 1000;
+        await new Promise(res => setTimeout(res, delay));
+        attempt++;
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Gemini API exhausted retries');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,7 +58,9 @@ export async function POST(request: NextRequest) {
       {
         cookies: {
           getAll() { return cookieStore.getAll(); },
-          setAll(cookiesToSet) { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
+          }
         }
       }
     );
@@ -48,64 +73,58 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No file' }, { status: 400 });
 
     const bytes = await file.arrayBuffer();
+    const base64Data = Buffer.from(bytes).toString('base64');
 
-    let response;
-    try {
-      response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash',
-        contents: [{ inlineData: { mimeType: file.type, data: Buffer.from(bytes).toString('base64') } }, { text: "Extract mark deductions and categorize them with tags." }],
+    const response = await callGeminiWithRetry(() =>
+      ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: [
+          { inlineData: { mimeType: file.type, data: base64Data } },
+          { text: `Analyze the exam script. Map each deduction to the MOST RELEVANT category from: ${TAXONOMY.join(', ')}. Return structured JSON.` }
+        ],
         config: { responseMimeType: 'application/json', responseSchema: examAnalysisSchema }
-      });
-    } catch (err: any) {
-      if (err.status === 429) {
-        return NextResponse.json({ error: 'Rate limit exceeded.' }, { status: 429 });
-      }
-      throw err;
-    }
+      })
+    );
 
     if (!response.text) throw new Error('Model returned empty response');
-    
+
     const parsed = JSON.parse(response.text);
     const entries = parsed.entries || [];
     const newEntryTags = Array.from(new Set(entries.flatMap((e: any) => e.tags || []))) as string[];
 
-    let isRedFlag = false;
+    let savedEntryId = null;
 
     if (entries.length > 0) {
-      const { data: pastFailures } = await supabase
-        .from('failures')
-        .select('tags')
-        .eq('user_id', user.id);
-
-      const overlapCount = pastFailures?.filter(past => {
-        const commonTags = past.tags.filter((t: string) => newEntryTags.includes(t));
-        return commonTags.length >= 2;
-      }).length || 0;
-
-      if (overlapCount >= 2) isRedFlag = true;
-
       const summary = entries.map((e: any) => `${e.questionNumber}: ${e.explanation}`).join('\n');
-      const embed = await ai.models.embedContent({ 
-        model: 'text-embedding-004', 
-        contents: { role: 'user', parts: [{ text: summary }] } 
-      });
-      
-      await supabase.from('failures').insert({
+
+      let embedding = null;
+      try {
+        const embedRes = await callGeminiWithRetry(() =>
+          ai.models.embedContent({
+            model: 'gemini-embedding-2',
+            contents: { role: 'user', parts: [{ text: summary }] }
+          })
+        );
+        embedding = embedRes.embeddings?.values ?? null;
+      } catch (e) {
+        console.error("Embedding failed", e);
+      }
+
+      const { data: inserted, error: insertError } = await supabase.from('failures').insert({
         user_id: user.id,
         title: file.name,
         type: 'Exam Script',
         tags: newEntryTags,
         reflection_notes: summary,
         breakdown_data: entries,
-        embedding: embed.embeddings?.values
-      });
+        embedding
+      }).select('id').single();
+
+      if (insertError) throw insertError;
+      savedEntryId = inserted.id;
     }
 
-    return NextResponse.json({ 
-      success: true, 
-      count: entries.length, 
-      redFlag: isRedFlag 
-    });
+    return NextResponse.json({ success: true, id: savedEntryId, count: entries.length });
   } catch (err) {
     console.error('API Error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
