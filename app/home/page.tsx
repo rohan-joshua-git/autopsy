@@ -103,7 +103,16 @@ export default function HomePage() {
   const maxPattern = topPatterns[0]?.[1] || 1;
   const totalMarksLost = entries.reduce((sum, e) => sum + getTotalMarksLost(e), 0);
   const openCases = entries.filter(e => !e.breakdown_data || e.breakdown_data.length === 0).length;
-  const redFlagTag = Object.entries(patternCounts).find(([, count]) => count >= 3)?.[0];
+  const latestEntry = entries[0];
+  const redFlagMatches = latestEntry
+    ? entries.slice(1).filter(e => {
+        const shared = (e.tags || []).filter(t => (latestEntry.tags || []).includes(t));
+        return shared.length >= 2;
+      })
+    : [];
+  const redFlagSharedTags = latestEntry
+    ? [...new Set(redFlagMatches.flatMap(e => (e.tags || []).filter(t => (latestEntry.tags || []).includes(t))))]
+    : [];
 
   if (loading) {
     return (
@@ -292,15 +301,27 @@ export default function HomePage() {
           </div>
         </div>
 
-        {redFlagTag && (
+        {redFlagMatches.length > 0 && (
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Red flags</div>
             <div style={{ background: '#1a0800', border: '0.5px solid #2a1000', borderRadius: 4, padding: 10 }}>
-              <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <i className="ti ti-alert-triangle" style={{ fontSize: 13 }} aria-hidden="true" />
-                Pattern repeat
+                Repeating pattern
               </div>
-              <div style={{ fontSize: 11, color: '#3a3a30' }}>{redFlagTag} detected {patternCounts[redFlagTag]}x.</div>
+              <div style={{ fontSize: 11, color: '#5a5a52', marginBottom: 8, lineHeight: 1.6 }}>
+                Latest entry repeats patterns from {redFlagMatches.length} past case{redFlagMatches.length > 1 ? 's' : ''}.
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {redFlagSharedTags.map(tag => {
+                  const s = getTagStyle(tag);
+                  return (
+                    <span key={tag} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, letterSpacing: '0.06em', background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
+                      {tag}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
