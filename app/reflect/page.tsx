@@ -6,9 +6,12 @@ import { supabase } from '@/lib/supabase';
 
 interface ParsedQuestion {
   questionNumber: string;
-  marksDeducted: number;
-  errorCategory: string;
-  description: string;
+  marksDeducted?: number;
+  marksLost?: number;
+  errorCategory?: string;
+  rootCause?: string;
+  description?: string;
+  explanation?: string;
 }
 
 const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -28,7 +31,7 @@ const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> 
   'Overlooking Constraints':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
 };
 const DEFAULT_TAG = { bg: '#1a1a16', color: '#5F5E5A', border: '#2e2e28' };
-const getTagStyle = (tag: string) => TAG_COLORS[tag] || DEFAULT_TAG;
+const getTagStyle = (tag?: string) => (tag && TAG_COLORS[tag]) ? TAG_COLORS[tag] : DEFAULT_TAG;
 
 function ReflectContent() {
   const router = useRouter();
@@ -210,19 +213,22 @@ function ReflectContent() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {questions.map((q, idx) => {
-                  const s = getTagStyle(q.errorCategory);
+                  const category = q.errorCategory || q.rootCause;
+                  const detail = q.description || q.explanation;
+                  const marks = q.marksDeducted || q.marksLost;
+                  const s = getTagStyle(category);
                   return (
                     <div key={idx} style={{ background: '#0a0a08', border: '0.5px solid #1a1a16', borderRadius: 4, padding: '14px 16px' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#3a3a30', letterSpacing: '0.08em' }}>Q{q.questionNumber}</span>
                           <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
-                            {q.errorCategory}
+                            {category}
                           </span>
                         </div>
-                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D' }}>−{q.marksDeducted}</span>
+                        <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D' }}>−{marks}</span>
                       </div>
-                      <p style={{ fontSize: 12, color: '#5a5a52', margin: 0, lineHeight: 1.6 }}>{q.description}</p>
+                      <p style={{ fontSize: 12, color: '#5a5a52', margin: 0, lineHeight: 1.6 }}>{detail}</p>
                     </div>
                   );
                 })}
