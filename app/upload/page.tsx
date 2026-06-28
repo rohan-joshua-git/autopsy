@@ -92,11 +92,13 @@ export default function UploadPage() {
 
       if (entriesError) throw new Error(entriesError.message);
 
-      sessionStorage.setItem('latest_parsed_exam', JSON.stringify({
-        case_id: caseRecord.id,
-        case_name: finalCaseName,
-        entries: entriesToInsert.map((entry) => ({ ...entry, case_name: finalCaseName })),
-      }));
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('latest_parsed_exam', JSON.stringify({
+          case_id: caseRecord.id,
+          case_name: finalCaseName,
+          entries: entriesToInsert.map((entry) => ({ ...entry, case_name: finalCaseName })),
+        }));
+      }
 
       router.push('/reflect?source=upload');
     } catch (err) {
