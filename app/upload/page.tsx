@@ -21,6 +21,13 @@ export default function UploadPage() {
   const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
+  const [parsedExamData, setParsedExamData] = useState<any[] | null>(null);
+  const [originalFileName, setOriginalFileName] = useState('');
+  const [namingStep, setNamingStep] = useState(false);
+  const [caseName, setCaseName] = useState('');
+  const [savingCase, setSavingCase] = useState(false);
+  const [saveError, setSaveError] = useState('');
+
   const handleChange = (index: number, value: string) => {
     const updated = [...answers];
     updated[index] = value;
@@ -32,18 +39,80 @@ export default function UploadPage() {
     setLoading(true);
     setStatusMessage('Ingesting file...');
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/login'); return; }
+
       const formData = new FormData();
       formData.append('file', file);
       const response = await fetch('/api/parse-exam', { method: 'POST', body: formData });
       if (!response.ok) throw new Error(`Parser returned status: ${response.status}`);
-      const parsedData = await response.json();
-      sessionStorage.setItem('latest_parsed_exam', JSON.stringify(parsedData));
-      setStatusMessage('Analysis complete. Opening case file...');
-      setTimeout(() => router.push('/reflect?source=upload'), 800);
+      const rawParsedData = await response.json();
+
+      const entries: any[] = Array.isArray(rawParsedData)
+        ? rawParsedData
+        : rawParsedData.entries ?? rawParsedData.failures ?? [];
+
+      setParsedExamData(entries);
+      setOriginalFileName(file.name);
+      setStatusMessage('');
+      setLoading(false);
+      setNamingStep(true);
     } catch (err) {
       setStatusMessage(err instanceof Error ? err.message : 'Ingestion failed.');
       setLoading(false);
     }
+  };
+
+  const handleConfirmCaseName = async () => {
+    if (!parsedExamData) return;
+    setSavingCase(true);
+    setSaveError('');
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { router.push('/login'); return; }
+
+      const finalCaseName = caseName.trim() || originalFileName;
+
+      const { data: caseRecord, error: caseError } = await supabase
+        .from('cases')
+        .insert({ user_id: user.id, case_name: finalCaseName })
+        .select()
+        .single();
+
+      if (caseError) throw new Error(caseError.message);
+
+      const entriesToInsert = parsedExamData.map((entry) => ({
+        ...entry,
+        case_id: caseRecord.id,
+      }));
+
+      const { error: entriesError } = await supabase
+        .from('failures')
+        .insert(entriesToInsert);
+
+      if (entriesError) throw new Error(entriesError.message);
+
+      sessionStorage.setItem('latest_parsed_exam', JSON.stringify({
+        case_id: caseRecord.id,
+        case_name: finalCaseName,
+        entries: entriesToInsert.map((entry) => ({ ...entry, case_name: finalCaseName })),
+      }));
+
+      router.push('/reflect?source=upload');
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save case.');
+    } finally {
+      setSavingCase(false);
+    }
+  };
+
+  const handleCancelNaming = () => {
+    setNamingStep(false);
+    setParsedExamData(null);
+    setOriginalFileName('');
+    setCaseName('');
+    setSaveError('');
+    setStatusMessage('');
   };
 
   const handleSubmit = async () => {
@@ -73,7 +142,6 @@ export default function UploadPage() {
       setSubmitted(true);
     } catch (err: any) {
       setError(err.message);
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -117,7 +185,7 @@ export default function UploadPage() {
       </div>
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#080808' }}>
+        <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', background: '#080808' }}>
           <div style={{ fontSize: 12, color: '#3a3a30', letterSpacing: '0.06em' }}>
             case files <span style={{ color: '#5a5a52' }}>/ new intake</span>
           </div>
@@ -147,42 +215,97 @@ export default function UploadPage() {
 
           {activeTab === 'upload' && (
             <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,image/*"
-                style={{ display: 'none' }}
-                onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
-              />
-              <div
-                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={e => { e.preventDefault(); setDragOver(false); if (!loading && e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }}
-                onClick={() => !loading && fileInputRef.current?.click()}
-                style={{
-                  border: `0.5px dashed ${dragOver ? '#5a5a52' : '#2e2e28'}`,
-                  borderRadius: 6, padding: '64px 24px', textAlign: 'center',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  background: dragOver ? '#0f0f0d' : '#0a0a08',
-                  transition: 'all 0.15s',
-                }}
-              >
-                <i className={`ti ${loading ? 'ti-loader' : 'ti-file-upload'}`} style={{ fontSize: 28, color: '#2e2e28', display: 'block', marginBottom: 16 }} aria-hidden="true" />
-                <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 6 }}>
-                  {loading ? 'Analyzing script...' : 'Drop exam script here'}
+              {namingStep ? (
+                <div style={{ border: '0.5px solid #1e1e1a', borderRadius: 6, padding: 32, background: '#0a0a08' }}>
+                  <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 8 }}>
+                    Name this case
+                  </div>
+                  <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 16 }}>
+                    Give this case file a name, or leave it blank to use the original filename.
+                  </div>
+                  <input
+                    type="text"
+                    value={caseName}
+                    onChange={e => setCaseName(e.target.value)}
+                    placeholder={originalFileName}
+                    disabled={savingCase}
+                    autoFocus
+                    style={{
+                      width: '100%', background: '#080808', border: '0.5px solid #1e1e1a',
+                      color: '#c8c8c0', borderRadius: 4, padding: '10px 12px', fontSize: 13,
+                      fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box', marginBottom: 16,
+                    }}
+                  />
+                  {saveError && (
+                    <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D', letterSpacing: '0.04em', marginBottom: 16 }}>
+                      {saveError}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      onClick={handleConfirmCaseName}
+                      disabled={savingCase}
+                      style={{
+                        background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#c8c8c0',
+                        padding: '8px 20px', borderRadius: 4, fontSize: 12, letterSpacing: '0.04em',
+                        cursor: savingCase ? 'not-allowed' : 'pointer', opacity: savingCase ? 0.5 : 1,
+                      }}
+                    >
+                      {savingCase ? 'Saving...' : 'Save & open case file'}
+                    </button>
+                    <button
+                      onClick={handleCancelNaming}
+                      disabled={savingCase}
+                      style={{
+                        background: 'transparent', border: '0.5px solid #2e2e28', color: '#5a5a52',
+                        padding: '8px 20px', borderRadius: 4, fontSize: 12, letterSpacing: '0.04em',
+                        cursor: savingCase ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
-                {!loading && <div style={{ fontSize: 11, color: '#2e2e28', marginBottom: 20 }}>PDF accepted</div>}
-                {!loading && (
-                  <div style={{ display: 'inline-block', padding: '6px 16px', border: '0.5px solid #2e2e28', borderRadius: 4, fontSize: 11, color: '#5a5a52', letterSpacing: '0.06em' }}>
-                    Browse files
+              ) : (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,image/*"
+                    style={{ display: 'none' }}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }}
+                  />
+                  <div
+                    onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                    onDragLeave={() => setDragOver(false)}
+                    onDrop={e => { e.preventDefault(); setDragOver(false); if (!loading && e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]); }}
+                    onClick={() => !loading && fileInputRef.current?.click()}
+                    style={{
+                      border: `0.5px dashed ${dragOver ? '#5a5a52' : '#2e2e28'}`,
+                      borderRadius: 6, padding: '64px 24px', textAlign: 'center',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      background: dragOver ? '#0f0f0d' : '#0a0a08',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <i className={`ti ${loading ? 'ti-loader' : 'ti-file-upload'}`} style={{ fontSize: 28, color: '#2e2e28', display: 'block', marginBottom: 16 }} aria-hidden="true" />
+                    <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 6 }}>
+                      {loading ? 'Analyzing script...' : 'Drop exam script here'}
+                    </div>
+                    {!loading && <div style={{ fontSize: 11, color: '#2e2e28', marginBottom: 20 }}>PDF accepted</div>}
+                    {!loading && (
+                      <div style={{ display: 'inline-block', padding: '6px 16px', border: '0.5px solid #2e2e28', borderRadius: 4, fontSize: 11, color: '#5a5a52', letterSpacing: '0.06em' }}>
+                        Browse files
+                      </div>
+                    )}
+                    {statusMessage && (
+                      <div style={{ fontSize: 11, marginTop: 20, fontFamily: 'monospace', color: statusMessage.startsWith('Analysis') ? '#3B6D11' : '#854F0B', letterSpacing: '0.04em' }}>
+                        {statusMessage}
+                      </div>
+                    )}
                   </div>
-                )}
-                {statusMessage && (
-                  <div style={{ fontSize: 11, marginTop: 20, fontFamily: 'monospace', color: statusMessage.startsWith('Analysis') ? '#3B6D11' : '#854F0B', letterSpacing: '0.04em' }}>
-                    {statusMessage}
-                  </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
