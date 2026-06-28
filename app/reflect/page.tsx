@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
-export default function ReflectPage() {
+function ReflectContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const id = searchParams.get('id');
@@ -14,7 +14,6 @@ export default function ReflectPage() {
   const [saving, setSaving] = useState(false);
 
   const loadEntry = useCallback(async () => {
-    // If no ID, redirect back to home or show an error
     if (!id) {
       router.push('/home');
       return;
@@ -76,5 +75,13 @@ export default function ReflectPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ReflectPage() {
+  return (
+    <Suspense fallback={<div style={{ background: '#080808', color: '#3a3a30', minHeight: '100vh', padding: 40, fontFamily: 'monospace' }}>LOADING CASE...</div>}>
+      <ReflectContent />
+    </Suspense>
   );
 }
