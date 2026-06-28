@@ -74,12 +74,14 @@ export async function POST(request: NextRequest) {
 
     const bytes = await file.arrayBuffer();
     const base64Data = Buffer.from(bytes).toString('base64');
+    
+    const mimeType = file.type || 'application/pdf';
 
     const response = await callGeminiWithRetry(() =>
       ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [
-          { inlineData: { mimeType: file.type, data: base64Data } },
+          { inlineData: { mimeType, data: base64Data } },
           { text: `Analyze the exam script. Map each deduction to the MOST RELEVANT category from: ${TAXONOMY.join(', ')}. Return structured JSON.` }
         ],
         config: { responseMimeType: 'application/json', responseSchema: examAnalysisSchema }

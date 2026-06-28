@@ -10,28 +10,25 @@ interface RealFailureEntry {
   question_number: string;
   error_category: string;
   marks_deducted: number;
+  case_name?: string;
 }
 
 interface GraphViewProps {
   entries: RealFailureEntry[];
 }
 
-const TAG_COLORS: Record<string, string> = {
-  'Calculation Flaw': '#378ADD',
-  'Algebraic Slip': '#378ADD',
-  'Arithmetic Error': '#378ADD',
-  'Formula Misapplication': '#D85A30',
-  'Conceptual Error': '#D85A30',
-  'Misunderstanding Core Principle': '#D85A30',
-  'Logic Branching Error': '#7F77DD',
-  'Edge Case Neglect': '#7F77DD',
-  'Syntax / Off-by-One': '#7F77DD',
-  'Time Pressure': '#EF9F27',
-  'Incomplete Answer': '#EF9F27',
-  'Rushed Execution': '#EF9F27',
-  'Misreading the Question': '#1D9E75',
-  'Overlooking Constraints': '#1D9E75',
-};
+function buildTagColorMap(categories: string[]): Record<string, string> {
+  const sorted = [...categories].sort();
+  const total = sorted.length;
+  const colorMap: Record<string, string> = {};
+
+  sorted.forEach((category, index) => {
+    const hue = total > 0 ? (index * 360) / total : 0;
+    colorMap[category] = `hsl(${hue}, 65%, 55%)`;
+  });
+
+  return colorMap;
+}
 
 export default function GraphView({ entries }: GraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -45,20 +42,22 @@ export default function GraphView({ entries }: GraphViewProps) {
       elements.push({
         data: { 
           id: entry.id, 
-          label: `${entry.module_code}\n${entry.assessment_name} (${entry.question_number})`, 
+          label: entry.case_name || entry.assessment_name || 'Untitled',
           type: 'failure' 
         },
       });
     });
 
     const uniqueCategories = new Set(entries.map((e) => e.error_category).filter(Boolean));
+    const tagColorMap = buildTagColorMap(Array.from(uniqueCategories));
+
     uniqueCategories.forEach((category) => {
       elements.push({
         data: { 
           id: `tag-${category}`, 
           label: category, 
           type: 'tag', 
-          color: TAG_COLORS[category] || '#888780' 
+          color: tagColorMap[category] || '#888780' 
         },
       });
     });
