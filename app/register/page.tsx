@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import AuthInput from '@/app/components/AuthInput';
+import AuthButton from '@/app/components/AuthButton';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -38,7 +40,7 @@ export default function RegisterPage() {
       } else if (data?.session) {
         setIsError(false);
         setMessage('Case file created. Redirecting...');
-        setTimeout(() => router.push('/home'), 800);
+        setTimeout(() => router.push('/welcome'), 800);
       } else {
         setIsError(false);
         setMessage('Check your email to confirm your account before logging in.');
@@ -83,39 +85,23 @@ export default function RegisterPage() {
           </div>
 
           <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 6 }}>Email</div>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@email.com"
-                disabled={loading}
-                style={{
-                  width: '100%', background: '#0a0a08', border: '0.5px solid #2e2e28',
-                  color: '#c8c8c0', borderRadius: 4, padding: '10px 12px', fontSize: 13,
-                  outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace',
-                  opacity: loading ? 0.5 : 1,
-                }}
-              />
-            </div>
+            <AuthInput
+              label="Email"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@email.com"
+              disabled={loading}
+            />
 
-            <div>
-              <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 6 }}>Password</div>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-                disabled={loading}
-                style={{
-                  width: '100%', background: '#0a0a08', border: '0.5px solid #2e2e28',
-                  color: '#c8c8c0', borderRadius: 4, padding: '10px 12px', fontSize: 13,
-                  outline: 'none', boxSizing: 'border-box', fontFamily: 'monospace',
-                  opacity: loading ? 0.5 : 1,
-                }}
-              />
-            </div>
+            <AuthInput
+              label="Password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="••••••••"
+              disabled={loading}
+            />
 
             {message && (
               <div style={{ fontSize: 11, fontFamily: 'monospace', color: isError ? '#993C1D' : '#3B6D11', letterSpacing: '0.04em' }}>
@@ -123,14 +109,9 @@ export default function RegisterPage() {
               </div>
             )}
 
-            <button type="submit" disabled={loading} style={{
-              background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#c8c8c0',
-              padding: '10px 20px', borderRadius: 4, fontSize: 12, cursor: loading ? 'not-allowed' : 'pointer',
-              letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 4,
-              opacity: loading ? 0.5 : 1,
-            }}>
+            <AuthButton type="submit" disabled={loading}>
               {loading ? 'Registering...' : 'Create account'}
-            </button>
+            </AuthButton>
 
             <div style={{ fontSize: 11, color: '#2e2e28', textAlign: 'center', marginTop: 4 }}>
               Already have a file?{' '}

@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import Sidebar from '@/app/components/Sidebar';
 
 const prompts = [
   "What was the main thing that went wrong?",
@@ -158,37 +159,15 @@ export default function UploadPage() {
     { icon: 'ti-layout-grid', label: 'Case Files', action: () => router.push('/home') },
     { icon: 'ti-upload', label: 'New Intake', active: true, action: () => {} },
     { icon: 'ti-search', label: 'Search', action: () => router.push('/home?search=1') },
+    { icon: 'ti-help-circle', label: 'How it works', action: () => router.push('/welcome') },
   ];
 
   return (
     <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
-      <div style={{ width: 200, background: '#0d0d0b', borderRight: '0.5px solid #1e1e1a', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-        <div style={{ padding: '0 20px 20px', borderBottom: '0.5px solid #1e1e1a', marginBottom: 12 }}>
-          <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>
-          <div style={{ fontSize: 10, color: '#2e2e28', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Failure Intelligence</div>
-        </div>
-        {sidebarItems.map(item => (
-          <div key={item.label} onClick={item.action} style={{
-            padding: '8px 20px', fontSize: 13,
-            color: (item as any).active ? '#c8c8c0' : '#5a5a52',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
-            borderLeft: (item as any).active ? '2px solid #3a3a30' : '2px solid transparent',
-            background: (item as any).active ? '#111110' : 'transparent',
-          }}>
-            <i className={`ti ${item.icon}`} style={{ fontSize: 15 }} aria-hidden="true" />
-            {item.label}
-          </div>
-        ))}
-        <div style={{ marginTop: 'auto' }}>
-          <div onClick={() => supabase.auth.signOut().then(() => router.push('/login'))} style={{
-            padding: '8px 20px', fontSize: 13, color: '#3a3a30', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 10, borderLeft: '2px solid transparent',
-          }}>
-            <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true" />
-            Sign out
-          </div>
-        </div>
-      </div>
+      <Sidebar
+        items={sidebarItems.map(i => ({ icon: i.icon, label: i.label, active: (i as any).active, onClick: i.action }))}
+        onSignOut={() => supabase.auth.signOut().then(() => router.push('/login'))}
+      />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <div style={{ borderBottom: '0.5px solid #1e1e1a', padding: '14px 24px', background: '#080808' }}>
