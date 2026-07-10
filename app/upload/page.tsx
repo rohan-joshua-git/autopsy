@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Sidebar from '@/app/components/Sidebar';
+import { useToast } from '@/app/components/Toast';
 
 const prompts = [
   "What was the main thing that went wrong?",
@@ -13,13 +14,13 @@ const prompts = [
 
 export default function UploadPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('upload');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [answers, setAnswers] = useState(['', '', '']);
   const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
 
   const [parsedExamData, setParsedExamData] = useState<any[] | null>(null);
@@ -27,7 +28,6 @@ export default function UploadPage() {
   const [namingStep, setNamingStep] = useState(false);
   const [caseName, setCaseName] = useState('');
   const [savingCase, setSavingCase] = useState(false);
-  const [saveError, setSaveError] = useState('');
 
   const handleChange = (index: number, value: string) => {
     const updated = [...answers];
@@ -40,7 +40,7 @@ export default function UploadPage() {
   const handleFileUpload = async (file: File) => {
     if (!file) return;
     if (file.size > MAX_FILE_SIZE_BYTES) {
-      setStatusMessage(`This file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please upload a PDF under 4MB.`);
+      showToast(`This file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please upload a PDF under 4MB.`, 'error');
       return;
     }
     setLoading(true);
@@ -67,7 +67,8 @@ export default function UploadPage() {
       setLoading(false);
       setNamingStep(true);
     } catch (err) {
-      setStatusMessage(err instanceof Error ? err.message : 'Ingestion failed.');
+      showToast(err instanceof Error ? err.message : 'Ingestion failed.', 'error');
+      setStatusMessage('');
       setLoading(false);
     }
   };
@@ -75,7 +76,6 @@ export default function UploadPage() {
   const handleConfirmCaseName = async () => {
     if (!parsedExamData) return;
     setSavingCase(true);
-    setSaveError('');
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/login'); return; }
@@ -108,7 +108,7 @@ export default function UploadPage() {
 
       router.push('/home');
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save case.');
+      showToast(err instanceof Error ? err.message : 'Failed to save case.', 'error');
     } finally {
       setSavingCase(false);
     }
@@ -119,13 +119,11 @@ export default function UploadPage() {
     setParsedExamData(null);
     setOriginalFileName('');
     setCaseName('');
-    setSaveError('');
     setStatusMessage('');
   };
 
   const handleSubmit = async () => {
     setLoading(true);
-    setError('');
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/login'); return; }
@@ -149,7 +147,7 @@ export default function UploadPage() {
       
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message);
+      showToast(err.message || 'Failed to save reflection.', 'error');
     } finally {
       setLoading(false);
     }
@@ -163,7 +161,7 @@ export default function UploadPage() {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
+    <div className="page-transition" style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
       <Sidebar
         items={sidebarItems.map(i => ({ icon: i.icon, label: i.label, active: (i as any).active, onClick: i.action }))}
         onSignOut={() => supabase.auth.signOut().then(() => router.push('/login'))}
@@ -221,11 +219,6 @@ export default function UploadPage() {
                       fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box', marginBottom: 16,
                     }}
                   />
-                  {saveError && (
-                    <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D', letterSpacing: '0.04em', marginBottom: 16 }}>
-                      {saveError}
-                    </div>
-                  )}
                   <div style={{ display: 'flex', gap: 12 }}>
                     <button
                       onClick={handleConfirmCaseName}
@@ -337,11 +330,6 @@ export default function UploadPage() {
                       />
                     </div>
                   ))}
-                  {error && (
-                    <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#993C1D', letterSpacing: '0.04em' }}>
-                      {error}
-                    </div>
-                  )}
                   <button
                     onClick={handleSubmit}
                     disabled={loading || answers.every(a => a.trim() === '')}

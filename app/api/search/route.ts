@@ -45,8 +45,9 @@ export async function POST(req: Request) {
 
     if (rpcError) throw rpcError;
     return NextResponse.json({ matches });
-  } catch (error) {
+  } catch (error: any) {
     console.error('SEARCH_ERROR:', error);
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+    const message = error?.message || (error instanceof Error ? error.message : null) || 'Search failed';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

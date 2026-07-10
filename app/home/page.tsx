@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import GraphView from './GraphView';
 import Sidebar from '@/app/components/Sidebar';
+import Loader from '@/app/components/Loader';
 
 interface FailureEntry {
   id: string;
@@ -87,7 +88,7 @@ function HomeContent() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'exam' | 'reflection'>('all');
 
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(() => searchParams.get('search') === '1');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<VectorSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -109,10 +110,6 @@ function HomeContent() {
     load();
   }, [router]);
 
-  useEffect(() => {
-    if (searchParams.get('search') === '1') setIsSearchOpen(true);
-  }, [searchParams]);
-
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!searchQuery.trim()) return;
@@ -126,8 +123,8 @@ function HomeContent() {
         body: JSON.stringify({ query: searchQuery, limit: 5 }),
       });
 
-      if (!res.ok) throw new Error('Failed to fetch semantic search matches.');
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch semantic search matches.');
       setSearchResults(data.matches || []);
     } catch (err: any) {
       setSearchError(err.message || 'Error conducting similarity search.');
@@ -171,15 +168,11 @@ function HomeContent() {
   });
 
   if (loading) {
-    return (
-      <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
-        LOADING CASE FILES...
-      </div>
-    );
+    return <Loader label="LOADING CASE FILES..." />;
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)', position: 'relative', overflow: 'hidden' }}>
+    <div className="page-transition" style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)', position: 'relative', overflow: 'hidden' }}>
 
       <Sidebar
         items={[
@@ -461,11 +454,7 @@ function HomeContent() {
 
 export default function HomePage() {
   return (
-    <Suspense fallback={
-      <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
-        LOADING CASE FILES...
-      </div>
-    }>
+    <Suspense fallback={<Loader label="LOADING CASE FILES..." />}>
       <HomeContent />
     </Suspense>
   );

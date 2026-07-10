@@ -42,7 +42,7 @@ export default function WelcomePage() {
   const current = STEPS[step];
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-geist-sans, sans-serif)', padding: 24 }}>
+    <div className="page-transition" style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-geist-sans, sans-serif)', padding: 24 }}>
       <div style={{ width: '100%', maxWidth: 440 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
           <div style={{ fontSize: 15, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Autopsy</div>

@@ -6,25 +6,22 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import AuthInput from '@/app/components/AuthInput';
 import AuthButton from '@/app/components/AuthButton';
+import { useToast } from '@/app/components/Toast';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [isError, setIsError] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
-      setIsError(true);
-      setMessage('Email and password required.');
+      showToast('Email and password required.', 'error');
       return;
     }
     setLoading(true);
-    setMessage('');
-    setIsError(false);
     try {
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -32,22 +29,17 @@ export default function RegisterPage() {
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) {
-        setIsError(true);
-        setMessage(error.message);
+        showToast(error.message, 'error');
       } else if (data?.user && data.user.identities?.length === 0) {
-        setIsError(true);
-        setMessage('An account with this email already exists. Try logging in instead.');
+        showToast('An account with this email already exists. Try logging in instead.', 'error');
       } else if (data?.session) {
-        setIsError(false);
-        setMessage('Case file created. Redirecting...');
+        showToast('Case file created. Redirecting...', 'success');
         setTimeout(() => router.push('/welcome'), 800);
       } else {
-        setIsError(false);
-        setMessage('Check your email to confirm your account before logging in.');
+        showToast('Check your email to confirm your account before logging in.', 'success', 6000);
       }
     } catch (err) {
-      setIsError(true);
-      setMessage('Unexpected error during registration.');
+      showToast('Unexpected error during registration.', 'error');
       console.error(err);
     } finally {
       setLoading(false);
@@ -55,7 +47,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
+    <div className="page-transition" style={{ minHeight: '100vh', background: '#080808', color: '#c8c8c0', display: 'flex', fontFamily: 'var(--font-geist-sans, sans-serif)' }}>
 
       {/* Left panel */}
       <div style={{ width: 360, borderRight: '0.5px solid #1e1e1a', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: 40, background: '#0d0d0b' }}>
@@ -64,13 +56,13 @@ export default function RegisterPage() {
           <div style={{ fontSize: 10, color: '#2e2e28', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 2 }}>Failure Intelligence</div>
         </div>
         <div>
-          <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#2e2e28', letterSpacing: '0.08em', marginBottom: 12 }}>// intake protocol</div>
+          <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#2e2e28', letterSpacing: '0.08em', marginBottom: 12 }}>// new case</div>
           <div style={{ fontSize: 13, color: '#3a3a30', lineHeight: 1.8 }}>
-            Every failure is a data point. Every pattern is a lesson waiting to be classified.
+            You already know what went wrong. This is where you find out why.
           </div>
         </div>
         <div style={{ fontSize: 10, color: '#1e1e1a', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
-          AUTOPSY v0.1.0 — ORBITAL 26
+          AUTOPSY v0.3.0 — ORBITAL 26
         </div>
       </div>
 
@@ -103,12 +95,6 @@ export default function RegisterPage() {
               disabled={loading}
             />
 
-            {message && (
-              <div style={{ fontSize: 11, fontFamily: 'monospace', color: isError ? '#993C1D' : '#3B6D11', letterSpacing: '0.04em' }}>
-                {message}
-              </div>
-            )}
-
             <AuthButton type="submit" disabled={loading}>
               {loading ? 'Registering...' : 'Create account'}
             </AuthButton>
@@ -116,7 +102,7 @@ export default function RegisterPage() {
             <div style={{ fontSize: 11, color: '#2e2e28', textAlign: 'center', marginTop: 4 }}>
               Already have a file?{' '}
               <Link href="/login" style={{ color: '#5a5a52', textDecoration: 'underline' }}>
-                Authenticate
+                Log in
               </Link>
             </div>
           </form>
