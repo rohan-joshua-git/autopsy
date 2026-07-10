@@ -34,8 +34,14 @@ export default function UploadPage() {
     setAnswers(updated);
   };
 
+  const MAX_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+
   const handleFileUpload = async (file: File) => {
     if (!file) return;
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setStatusMessage(`This file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Please upload a PDF under 4MB.`);
+      return;
+    }
     setLoading(true);
     setStatusMessage('Ingesting file...');
     try {
@@ -45,7 +51,9 @@ export default function UploadPage() {
       const formData = new FormData();
       formData.append('file', file);
       const response = await fetch('/api/parse-exam', { method: 'POST', body: formData });
-      if (!response.ok) throw new Error(`Parser returned status: ${response.status}`);
+      if (response.status === 413) throw new Error('This file is too large for the server to process. Please upload a PDF under 4MB.');
+      if (response.status === 401) throw new Error('Your session has expired. Please log in again.');
+      if (!response.ok) throw new Error('Something went wrong reading this file. Please try a different PDF.');
       const rawParsedData = await response.json();
 
       const entries: any[] = Array.isArray(rawParsedData)
@@ -82,7 +90,12 @@ export default function UploadPage() {
       if (caseError) throw new Error(caseError.message);
 
       const entriesToInsert = parsedExamData.map((entry) => ({
-        ...entry,
+        question_number: entry.questionNumber ?? entry.question_number,
+        marks_lost: entry.marksLost ?? entry.marks_lost,
+        root_cause: entry.rootCause ?? entry.root_cause,
+        explanation: entry.explanation,
+        tags: entry.tags,
+        user_id: user.id,
         case_id: caseRecord.id,
       }));
 
@@ -92,15 +105,7 @@ export default function UploadPage() {
 
       if (entriesError) throw new Error(entriesError.message);
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('latest_parsed_exam', JSON.stringify({
-          case_id: caseRecord.id,
-          case_name: finalCaseName,
-          entries: entriesToInsert.map((entry) => ({ ...entry, case_name: finalCaseName })),
-        }));
-      }
-
-      router.push('/reflect?source=upload');
+      router.push('/home');
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to save case.');
     } finally {
@@ -294,7 +299,7 @@ export default function UploadPage() {
                     <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 6 }}>
                       {loading ? 'Analyzing script...' : 'Drop exam script here'}
                     </div>
-                    {!loading && <div style={{ fontSize: 11, color: '#2e2e28', marginBottom: 20 }}>PDF accepted</div>}
+                    {!loading && <div style={{ fontSize: 11, color: '#2e2e28', marginBottom: 20 }}>PDF accepted, max 4MB</div>}
                     {!loading && (
                       <div style={{ display: 'inline-block', padding: '6px 16px', border: '0.5px solid #2e2e28', borderRadius: 4, fontSize: 11, color: '#5a5a52', letterSpacing: '0.06em' }}>
                         Browse files

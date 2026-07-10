@@ -214,25 +214,30 @@ function SemanticSearch() {
   const [results, setResults] = useState<typeof DEMO_ENTRIES>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [searchError, setSearchError] = useState('');
 
   const handleSearch = async () => {
   if (!query.trim()) return;
   setLoading(true);
   setSearched(false);
+  setSearchError('');
 
   try {
     const response = await fetch('/api/gemini', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    prompt: `You are a semantic search engine for a student failure library. Given a search query and a list of exam failure entries, return ONLY a raw JSON array of the most relevant entry IDs. No explanation, no markdown, just the array. Example: ["e1","e3"]\n\nQuery: "${query}"\n\nEntries:\n${DEMO_ENTRIES.map(e => `ID: ${e.id} | Title: ${e.title} | Tags: ${e.tags.join(', ')} | Notes: ${e.questions.map(q => q.note).join('; ')}`).join('\n')}`
+    json: true,
+    prompt: `You are a semantic search engine for a student failure library. Given a search query and a list of exam failure entries, return a JSON array of the most relevant entry IDs. Example: ["e1","e3"]\n\nQuery: "${query}"\n\nEntries:\n${DEMO_ENTRIES.map(e => `ID: ${e.id} | Title: ${e.title} | Tags: ${e.tags.join(', ')} | Notes: ${e.questions.map(q => q.note).join('; ')}`).join('\n')}`
   })
 });
 const data = await response.json();
-const ids: string[] = JSON.parse(data.text.replace(/```json|```/g, '').trim());
+if (!response.ok) throw new Error(data.error || 'Search request failed.');
+const ids: string[] = JSON.parse(data.text);
 setResults(DEMO_ENTRIES.filter(e => ids.includes(e.id)));
-  } catch {
+  } catch (err) {
     setResults([]);
+    setSearchError(err instanceof Error ? err.message : 'Search failed. Please try again.');
   } finally {
     setLoading(false);
     setSearched(true);
@@ -283,7 +288,11 @@ setResults(DEMO_ENTRIES.filter(e => ids.includes(e.id)));
         </div>
       )}
 
-      {searched && !loading && results.length === 0 && (
+      {searched && !loading && searchError && (
+        <div style={{ fontSize: 12, color: '#993C1D', fontStyle: 'italic' }}>{searchError}</div>
+      )}
+
+      {searched && !loading && !searchError && results.length === 0 && (
         <div style={{ fontSize: 12, color: '#2e2e28', fontStyle: 'italic' }}>No relevant entries found.</div>
       )}
 

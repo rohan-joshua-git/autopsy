@@ -7,7 +7,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt } = await request.json()
+    const { prompt, json } = await request.json()
 
     if (!prompt) {
       return NextResponse.json({ error: 'No prompt provided.' }, { status: 400 })
@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const response = await ai.models.generateContent({
       model: 'gemini-2.0-flash',
       contents: [{ parts: [{ text: prompt }] }],
+      ...(json ? { config: { responseMimeType: 'application/json' } } : {}),
     })
 
     return NextResponse.json({ text: response.text })

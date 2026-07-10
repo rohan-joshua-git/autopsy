@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { supabase } from '@/lib/supabase';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export async function POST(req: Request) {
   try {
     const { userId, text, breakdownData } = await req.json();
 
-    const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
-
-    const result = await model.embedContent(text);
+    const result = await ai.models.embedContent({
+      model: 'text-embedding-004',
+      contents: { role: 'user', parts: [{ text }] },
+    });
 
     const { error } = await supabase.from('failures').insert({
       user_id: userId,
@@ -18,7 +19,7 @@ export async function POST(req: Request) {
       type: 'reflection',
       reflection_notes: text,
       breakdown_data: breakdownData,
-      embedding: result.embedding.values,
+      embedding: result.embeddings?.values ?? null,
     });
 
     if (error) throw error;

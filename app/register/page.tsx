@@ -24,14 +24,24 @@ export default function RegisterPage() {
     setMessage('');
     setIsError(false);
     try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
       if (error) {
         setIsError(true);
         setMessage(error.message);
-      } else if (data?.user) {
+      } else if (data?.user && data.user.identities?.length === 0) {
+        setIsError(true);
+        setMessage('An account with this email already exists. Try logging in instead.');
+      } else if (data?.session) {
         setIsError(false);
         setMessage('Case file created. Redirecting...');
         setTimeout(() => router.push('/home'), 800);
+      } else {
+        setIsError(false);
+        setMessage('Check your email to confirm your account before logging in.');
       }
     } catch (err) {
       setIsError(true);

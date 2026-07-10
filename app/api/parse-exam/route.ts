@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       try {
         const embedRes = await callGeminiWithRetry(() =>
           ai.models.embedContent({
-            model: 'gemini-embedding-2',
+            model: 'text-embedding-004',
             contents: { role: 'user', parts: [{ text: summary }] }
           })
         );
