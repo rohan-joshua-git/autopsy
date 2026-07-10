@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import GraphView from './GraphView';
 
@@ -79,8 +79,9 @@ function PatternBar({ count, max }: { count: number; max: number }) {
   );
 }
 
-export default function HomePage() {
+function HomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [entries, setEntries] = useState<FailureEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'exam' | 'reflection'>('all');
@@ -106,6 +107,10 @@ export default function HomePage() {
     }
     load();
   }, [router]);
+
+  useEffect(() => {
+    if (searchParams.get('search') === '1') setIsSearchOpen(true);
+  }, [searchParams]);
 
   const handleSearchSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -184,7 +189,6 @@ export default function HomePage() {
         {[
           { icon: 'ti-layout-grid', label: 'Case Files', active: !isSearchOpen, action: () => setIsSearchOpen(false) },
           { icon: 'ti-upload', label: 'New Intake', action: () => router.push('/upload') },
-          { icon: 'ti-flask', label: 'POC Demo', action: () => router.push('/poc') },
           { icon: 'ti-search', label: 'Search', active: isSearchOpen, action: () => setIsSearchOpen(true) },
         ].map(item => (
           <div key={item.label} onClick={item.action} style={{
@@ -474,5 +478,17 @@ export default function HomePage() {
       </div>
 
     </div>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#080808', color: '#3a3a30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, letterSpacing: '0.1em', fontFamily: 'monospace' }}>
+        LOADING CASE FILES...
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }

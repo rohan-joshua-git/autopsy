@@ -157,8 +157,7 @@ export default function UploadPage() {
   const sidebarItems = [
     { icon: 'ti-layout-grid', label: 'Case Files', action: () => router.push('/home') },
     { icon: 'ti-upload', label: 'New Intake', active: true, action: () => {} },
-    { icon: 'ti-flask', label: 'POC Demo', action: () => router.push('/poc') },
-    { icon: 'ti-search', label: 'Search', action: () => {} },
+    { icon: 'ti-search', label: 'Search', action: () => router.push('/home?search=1') },
   ];
 
   return (

@@ -9,8 +9,9 @@ export async function POST(req: Request) {
     const { userId, text, breakdownData } = await req.json();
 
     const result = await ai.models.embedContent({
-      model: 'text-embedding-004',
+      model: 'gemini-embedding-001',
       contents: { role: 'user', parts: [{ text }] },
+      config: { outputDimensionality: 768 },
     });
 
     const { error } = await supabase.from('failures').insert({

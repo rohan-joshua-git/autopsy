@@ -103,8 +103,9 @@ export async function POST(request: NextRequest) {
       try {
         const embedRes = await callGeminiWithRetry(() =>
           ai.models.embedContent({
-            model: 'text-embedding-004',
-            contents: { role: 'user', parts: [{ text: summary }] }
+            model: 'gemini-embedding-001',
+            contents: { role: 'user', parts: [{ text: summary }] },
+            config: { outputDimensionality: 768 },
           })
         );
         embedding = embedRes.embeddings?.values ?? null;
