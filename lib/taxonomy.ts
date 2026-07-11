@@ -1,38 +1,50 @@
 export const TAXONOMY = [
-  // 1. Core Understanding (Conceptual Void)
-  'Conceptual Void',             // Fundamental misunderstanding of the topic
-  'Calibration Gap',             // Overconfidence; thought I knew it, but didn't
-  'Heuristic Failure',           // Applied a rule that didn't fit the context
+  // Dimension 1: Technical
+  'Logic Flaw',                    // Fundamental algorithmic error
+  'Edge Case Neglect',             // Failed to handle boundary conditions (e.g., empty lists, nulls)
+  'Complexity Miscalculation',     // Used an inefficient approach (O(N^2) instead of O(N log N))
+  'Syntax/Language Nuance',        // Misunderstanding language-specific behaviors
+  'Initialization Error',          // Garbage values or incorrect starting states
+  'Concurrency/State Issue',       // Race conditions or shared state corruption
 
-  // 2. Technical Execution (Structural Blindness)
-  'Logic/Algorithmic Flaw',      // Fundamental flaw in the logic sequence
-  'Boundary/Edge Case Neglect',  // Failed to handle inputs/constraints (e.g., off-by-one)
-  'Syntax/Implementation Error', // Language-specific or notation slip-ups
+  // Dimension 2: Process & Methodology
+  'Requirements Misinterpretation', // Solved the wrong problem entirely
+  'Under-tested Logic',             // Lack of adequate unit/integration testing
+  'Poor Modularization',            // Code spaghetti; logic spread too thin
+  'Documentation/Naming',           // Unclear variable names leading to self-confusion
+  'Tooling/Library Misuse',         // Using the wrong library or API for the job
+  'Debugging Overhead',             // Wasted time chasing red herrings due to poor logging
 
-  // 3. Process & Methodology (Workflow Deficit)
-  'Requirement Misalignment',    // Solved the wrong problem/ignored constraints
-  'Incomplete Verification',     // Lacked sufficient testing/checking
-  'Debugging Inefficiency',      // Wasted time due to poor visibility/logging
-
-  // 4. Behavioral & Metacognitive (Execution Latency)
-  'Execution Latency',           // Knew the solution, but too slow to implement
-  'Cognitive Fatigue',           // Errors driven by exhaustion/late-night work
-  'Planning Deficit',            // Failed to map out the structure before coding
+  // Dimension 3: Behavioral/Metacognitive
+  'Time Pressure',                 // Rushed decisions under a looming deadline
+  'Lack of Preparation',           // Insufficient study/practice for the domain
+  'Cognitive Fatigue',             // Errors made late at night or after long sessions
+  'Overconfidence Bias',           // Assuming the solution was "easy" and skipping checks
+  'Scope Creep',                   // Adding complexity where simplicity was needed
+  'Planning Deficit',              // Lack of design phase; "coding before thinking"
 ] as const;
 
 export type TaxonomyCategory = typeof TAXONOMY[number];
 
-export const TAXONOMY_DIMENSIONS: Record<TaxonomyCategory, 'Understanding' | 'Technical' | 'Process' | 'Behavioral'> = {
-  'Conceptual Void': 'Understanding',
-  'Calibration Gap': 'Understanding',
-  'Heuristic Failure': 'Understanding',
-  'Logic/Algorithmic Flaw': 'Technical',
-  'Boundary/Edge Case Neglect': 'Technical',
-  'Syntax/Implementation Error': 'Technical',
-  'Requirement Misalignment': 'Process',
-  'Incomplete Verification': 'Process',
-  'Debugging Inefficiency': 'Process',
-  'Execution Latency': 'Behavioral',
+export const TAXONOMY_DIMENSIONS: Record<TaxonomyCategory, 'Technical' | 'Process' | 'Behavioral'> = {
+  'Logic Flaw': 'Technical',
+  'Edge Case Neglect': 'Technical',
+  'Complexity Miscalculation': 'Technical',
+  'Syntax/Language Nuance': 'Technical',
+  'Initialization Error': 'Technical',
+  'Concurrency/State Issue': 'Technical',
+
+  'Requirements Misinterpretation': 'Process',
+  'Under-tested Logic': 'Process',
+  'Poor Modularization': 'Process',
+  'Documentation/Naming': 'Process',
+  'Tooling/Library Misuse': 'Process',
+  'Debugging Overhead': 'Process',
+
+  'Time Pressure': 'Behavioral',
+  'Lack of Preparation': 'Behavioral',
   'Cognitive Fatigue': 'Behavioral',
+  'Overconfidence Bias': 'Behavioral',
+  'Scope Creep': 'Behavioral',
   'Planning Deficit': 'Behavioral',
 };

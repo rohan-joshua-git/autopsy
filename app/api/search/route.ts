@@ -8,7 +8,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export async function POST(req: Request) {
   try {
-    const { query, limit = 5 } = await req.json();
+    const { query, limit = 5, matchThreshold = 0.5 } = await req.json();
     const cookieStore = await cookies();
 
     const authClient = createServerClient(
@@ -30,7 +30,8 @@ export async function POST(req: Request) {
       config: { outputDimensionality: 768 },
     });
 
-    const embedding = response.embeddings?.values;
+    const embedding = response.embeddings?.[0]?.values;
+    if (!embedding) throw new Error('Failed to generate a query embedding.');
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     );
     const { data: matches, error: rpcError } = await supabase.rpc('match_failures', {
       query_embedding: embedding,
-      match_threshold: 0.3,
+      match_threshold: matchThreshold,
       match_count: limit,
       filter_user_id: user.id
     });

@@ -108,7 +108,7 @@ export async function POST(request: NextRequest) {
             config: { outputDimensionality: 768 },
           })
         );
-        embedding = embedRes.embeddings?.values ?? null;
+        embedding = embedRes.embeddings?.[0]?.values ?? null;
       } catch (e) {
         console.error("Embedding failed", e);
       }

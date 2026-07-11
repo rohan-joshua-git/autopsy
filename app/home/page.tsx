@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useMemo, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import GraphView from './GraphView';
 import Sidebar from '@/app/components/Sidebar';
 import Loader from '@/app/components/Loader';
+import { getTagStyle, getTagDimension, TagDimension } from '@/app/lib/tagColors';
+import { useToast } from '@/app/components/Toast';
 
 interface FailureEntry {
   id: string;
@@ -14,7 +16,8 @@ interface FailureEntry {
   tags: string[];
   created_at: string;
   answers?: string[];
-  breakdown_data?: { marksDeducted: number }[];
+  breakdown_data?: { marksLost: number }[];
+  case_id?: string | null;
 }
 
 interface VectorSearchResult {
@@ -26,49 +29,43 @@ interface VectorSearchResult {
   similarity: number;
 }
 
-const TAG_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  'Calculation Flaw':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
-  'Algebraic Slip':               { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
-  'Arithmetic Error':             { bg: '#0c1a2e', color: '#185FA5', border: '#0e2040' },
-  'Formula Misapplication':       { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
-  'Conceptual Error':             { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
-  'Misunderstanding Core Principle': { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' },
-  'Logic Branching Error':        { bg: '#1a1028', color: '#534AB7', border: '#221438' },
-  'Edge Case Neglect':            { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
-  'Syntax / Off-by-One':          { bg: '#1a1028', color: '#534AB7', border: '#221438' },
-  'Time Pressure':                { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
-  'Incomplete Answer':            { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
-  'Rushed Execution':             { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
-  'Misreading the Question':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
-  'Overlooking Constraints':      { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
-  'Incorrect Assumption':         { bg: '#0a1a12', color: '#0F6E56', border: '#0c2018' },
-  'Type Mismatch':                { bg: '#1a1028', color: '#534AB7', border: '#221438' },
-  'Sloppy Handwriting / Notation':{ bg: '#1a1a10', color: '#5F5E5A', border: '#222218' },
-  'Panic / Brain Fade':           { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' },
-};
-
-const DEFAULT_TAG = { bg: '#1a1a16', color: '#5F5E5A', border: '#2e2e28' };
-const getTagStyle = (tag: string) => TAG_COLORS[tag] || DEFAULT_TAG;
+function getMatchStyle(similarity: number) {
+  const pct = similarity * 100;
+  if (pct >= 70) return { bg: '#0a1a0c', color: '#3B6D11', border: '#0c200e' };
+  if (pct >= 50) return { bg: '#1e1400', color: '#854F0B', border: '#2a1c00' };
+  if (pct >= 30) return { bg: '#1c1a05', color: '#9A8B0F', border: '#2a2708' };
+  return { bg: '#1e0a08', color: '#993C1D', border: '#2a1008' };
+}
 
 function getTotalMarksLost(entry: FailureEntry): number {
   if (!entry.breakdown_data) return 0;
-  return entry.breakdown_data.reduce((sum, q) => sum + (q.marksDeducted || 0), 0);
+  return entry.breakdown_data.reduce((sum, q) => sum + (q.marksLost || 0), 0);
+}
+
+function getSeverityLevel(marks: number): number {
+  if (marks <= 0) return 0;
+  if (marks <= 2) return 1;
+  if (marks <= 5) return 2;
+  if (marks <= 9) return 3;
+  if (marks <= 14) return 4;
+  if (marks <= 19) return 5;
+  return 6;
 }
 
 function SeverityBar({ marks }: { marks: number }) {
-  const level = marks >= 15 ? 5 : marks >= 10 ? 4 : marks >= 6 ? 3 : marks >= 3 ? 2 : 1;
-  const color = level >= 4 ? '#993C1D' : level >= 3 ? '#854F0B' : '#3B6D11';
+  const level = getSeverityLevel(marks);
+  const color = level >= 5 ? '#993C1D' : level >= 3 ? '#854F0B' : '#3B6D11';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <div style={{ display: 'flex', gap: 2 }}>
-        {[1,2,3,4,5].map(i => (
+        {[1, 2, 3, 4, 5, 6].map(i => (
           <div key={i} style={{
             width: 6, height: 14, borderRadius: 1,
             background: i <= level ? color : '#1a1a16'
           }} />
         ))}
       </div>
-      <span style={{ fontSize: 11, fontFamily: 'monospace', color }}>{marks > 0 ? `−${marks}` : '—'}</span>
+      <span style={{ fontSize: 11, fontFamily: 'monospace', color: level > 0 ? color : '#3a3a30' }}>{marks > 0 ? `−${marks}` : '—'}</span>
     </div>
   );
 }
@@ -84,15 +81,22 @@ function PatternBar({ count, max }: { count: number; max: number }) {
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { showToast } = useToast();
   const [entries, setEntries] = useState<FailureEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'exam' | 'reflection'>('all');
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+  const [dimensionFilter, setDimensionFilter] = useState<TagDimension | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const [isSearchOpen, setIsSearchOpen] = useState(() => searchParams.get('search') === '1');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<VectorSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [relevantOnly, setRelevantOnly] = useState(true);
+  const [hasSearched, setHasSearched] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -110,17 +114,17 @@ function HomeContent() {
     load();
   }, [router]);
 
-  const handleSearchSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!searchQuery.trim()) return;
+  const runSearch = async (q: string, strict: boolean) => {
+    if (!q.trim()) return;
 
     setIsSearching(true);
     setSearchError('');
+    setHasSearched(true);
     try {
       const res = await fetch('/api/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: searchQuery, limit: 5 }),
+        body: JSON.stringify({ query: q, limit: 5, matchThreshold: strict ? 0.5 : 0 }),
       });
 
       const data = await res.json();
@@ -133,11 +137,49 @@ function HomeContent() {
     }
   };
 
-  const filtered = entries.filter(e => {
-    if (filter === 'exam') return e.type === 'Exam Script';
-    if (filter === 'reflection') return e.type !== 'Exam Script';
-    return true;
-  });
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSearch(searchQuery, relevantOnly);
+  };
+
+  const toggleRelevantOnly = () => {
+    const next = !relevantOnly;
+    setRelevantOnly(next);
+    if (hasSearched && searchQuery.trim()) runSearch(searchQuery, next);
+  };
+
+  const handleDeleteEntry = async (entry: FailureEntry) => {
+    setDeletingId(entry.id);
+    try {
+      const { error: deleteError } = await supabase.from('failures').delete().eq('id', entry.id);
+      if (deleteError) throw deleteError;
+
+      if (entry.case_id) {
+        const { count } = await supabase
+          .from('failures')
+          .select('id', { count: 'exact', head: true })
+          .eq('case_id', entry.case_id);
+        if (!count) {
+          await supabase.from('cases').delete().eq('id', entry.case_id);
+        }
+      }
+
+      setEntries(prev => prev.filter(e => e.id !== entry.id));
+      showToast('Case deleted.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete case.', 'error');
+    } finally {
+      setDeletingId(null);
+      setConfirmingDeleteId(null);
+    }
+  };
+
+  const filtered = useMemo(() => entries.filter(e => {
+    const typeMatch = filter === 'exam' ? e.type === 'Exam Script' : filter === 'reflection' ? e.type !== 'Exam Script' : true;
+    const tagMatch = tagFilter ? (e.tags || []).includes(tagFilter) : true;
+    const dimMatch = dimensionFilter ? (e.tags || []).some(t => getTagDimension(t) === dimensionFilter) : true;
+    return typeMatch && tagMatch && dimMatch;
+  }), [entries, filter, tagFilter, dimensionFilter]);
 
   const patternCounts: Record<string, number> = {};
   entries.forEach(e => (e.tags || []).forEach(t => { patternCounts[t] = (patternCounts[t] || 0) + 1; }));
@@ -145,27 +187,29 @@ function HomeContent() {
   const maxPattern = topPatterns[0]?.[1] || 1;
   const totalMarksLost = entries.reduce((sum, e) => sum + getTotalMarksLost(e), 0);
   const openCases = entries.filter(e => !e.breakdown_data || e.breakdown_data.length === 0).length;
-  const latestEntry = entries[0];
-  const redFlagMatches = latestEntry
-    ? entries.slice(1).filter(e => {
-        const shared = (e.tags || []).filter(t => (latestEntry.tags || []).includes(t));
-        return shared.length >= 2;
-      })
-    : [];
-  const redFlagSharedTags = latestEntry
-    ? [...new Set(redFlagMatches.flatMap(e => (e.tags || []).filter(t => (latestEntry.tags || []).includes(t))))]
+  const redFlagThreshold = 0.5;
+  const redFlagTags = entries.length > 0
+    ? Object.entries(patternCounts)
+        .filter(([, count]) => count / entries.length >= redFlagThreshold)
+        .sort((a, b) => b[1] - a[1])
     : [];
 
-  const graphCompatibleEntries = entries.flatMap(entry => {
-    return (entry.tags || []).map(tag => ({
-      id: `${entry.id}-${tag}`,
-      module_code: entry.title?.split(' ')[0] || 'Unknown',
-      assessment_name: entry.title || entry.type || 'Assessment',
-      question_number: tag.split(' ')[0] || 'Error',
-      error_category: tag,
-      marks_deducted: getTotalMarksLost(entry)
-    }));
-  });
+  const graphEntries = useMemo(() => filtered.map(entry => ({
+    id: entry.id,
+    title: entry.title || entry.type || 'Untitled',
+    tags: entry.tags || [],
+    marksLost: getTotalMarksLost(entry),
+  })), [filtered]);
+
+  const handleSelectCase = useCallback((id: string) => router.push(`/reflect?id=${id}`), [router]);
+  const handleSelectTag = useCallback((tag: string) => {
+    setTagFilter(t => t === tag ? null : tag);
+    setDimensionFilter(null);
+  }, []);
+  const handleSelectDimension = useCallback((dimension: TagDimension) => {
+    setDimensionFilter(d => d === dimension ? null : dimension);
+    setTagFilter(null);
+  }, []);
 
   if (loading) {
     return <Loader label="LOADING CASE FILES..." />;
@@ -219,10 +263,16 @@ function HomeContent() {
           </div>
 
           <div style={{ background: '#0d0d0b', border: '0.5px solid #1e1e1a', borderRadius: 6, padding: 20, marginBottom: 24 }}>
-            <GraphView entries={graphCompatibleEntries} />
+            <GraphView
+              entries={graphEntries}
+              activeTag={tagFilter}
+              onSelectCase={handleSelectCase}
+              onSelectTag={handleSelectTag}
+              onSelectDimension={handleSelectDimension}
+            />
           </div>
 
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
             {(['all', 'exam', 'reflection'] as const).map(f => (
               <button key={f} onClick={() => setFilter(f)} style={{
                 padding: '4px 12px', borderRadius: 3, fontSize: 11, letterSpacing: '0.06em',
@@ -234,6 +284,29 @@ function HomeContent() {
                 {f === 'all' ? 'All' : f === 'exam' ? 'Exam scripts' : 'Reflections'}
               </button>
             ))}
+            {tagFilter && (() => {
+              const s = getTagStyle(tagFilter);
+              return (
+                <button onClick={() => setTagFilter(null)} style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '4px 10px', borderRadius: 3, fontSize: 11, letterSpacing: '0.04em',
+                  cursor: 'pointer', border: `0.5px solid ${s.border}`, background: s.bg, color: s.color,
+                }}>
+                  {tagFilter}
+                  <i className="ti ti-x" style={{ fontSize: 11 }} aria-hidden="true" />
+                </button>
+              );
+            })()}
+            {dimensionFilter && (
+              <button onClick={() => setDimensionFilter(null)} style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '4px 10px', borderRadius: 3, fontSize: 11, letterSpacing: '0.04em',
+                cursor: 'pointer', border: '0.5px solid #3a3a30', background: '#111110', color: '#a8a8a0',
+              }}>
+                {dimensionFilter}
+                <i className="ti ti-x" style={{ fontSize: 11 }} aria-hidden="true" />
+              </button>
+            )}
           </div>
 
           {filtered.length === 0 ? (
@@ -251,7 +324,7 @@ function HomeContent() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  {['Case ID', 'Subject', 'Root causes', 'Severity', 'Date'].map(h => (
+                  {['Case ID', 'Subject', 'Root causes', 'Severity', 'Date', ''].map(h => (
                     <th key={h} style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', padding: '8px 12px', textAlign: 'left', borderBottom: '0.5px solid #1a1a16' }}>{h}</th>
                   ))}
                 </tr>
@@ -287,6 +360,39 @@ function HomeContent() {
                       </td>
                       <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110', fontSize: 11, fontFamily: 'monospace', color: '#3a3a30' }}>
                         {new Date(entry.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })}
+                      </td>
+                      <td style={{ padding: '10px 12px', borderBottom: '0.5px solid #111110', textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                        {confirmingDeleteId === entry.id ? (
+                          <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                            <button
+                              onClick={() => handleDeleteEntry(entry)}
+                              disabled={deletingId === entry.id}
+                              style={{ background: '#1e0a08', border: '0.5px solid #2a1008', color: '#993C1D', padding: '3px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer', letterSpacing: '0.02em' }}
+                            >
+                              {deletingId === entry.id ? 'Deleting...' : 'Confirm'}
+                            </button>
+                            <button
+                              onClick={() => setConfirmingDeleteId(null)}
+                              style={{ background: 'transparent', border: '0.5px solid #2e2e28', color: '#5a5a52', padding: '3px 10px', borderRadius: 3, fontSize: 11, cursor: 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmingDeleteId(entry.id)}
+                            title="Delete case"
+                            style={{
+                              background: 'transparent', border: '0.5px solid #2e2e28', color: '#7a7a70',
+                              cursor: 'pointer', fontSize: 14, padding: '5px 9px', borderRadius: 4,
+                              transition: 'color 0.15s ease, border-color 0.15s ease',
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.color = '#993C1D'; e.currentTarget.style.borderColor = '#2a1008'; }}
+                            onMouseLeave={e => { e.currentTarget.style.color = '#7a7a70'; e.currentTarget.style.borderColor = '#2e2e28'; }}
+                          >
+                            <i className="ti ti-trash" aria-hidden="true" />
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -326,23 +432,25 @@ function HomeContent() {
           </div>
         </div>
 
-        {redFlagMatches.length > 0 && (
+        {redFlagTags.length > 0 && (
           <div>
             <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Red flags</div>
             <div style={{ background: '#1a0800', border: '0.5px solid #2a1000', borderRadius: 4, padding: 10 }}>
               <div style={{ fontSize: 11, color: '#854F0B', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <i className="ti ti-alert-triangle" style={{ fontSize: 13 }} aria-hidden="true" />
-                Repeating pattern
+                Repeating pattern{redFlagTags.length > 1 ? 's' : ''}
               </div>
               <div style={{ fontSize: 11, color: '#5a5a52', marginBottom: 8, lineHeight: 1.6 }}>
-                Latest entry repeats patterns from {redFlagMatches.length} past case{redFlagMatches.length > 1 ? 's' : ''}.
+                {redFlagTags.length} pattern{redFlagTags.length > 1 ? 's' : ''} showing up in at least {Math.round(redFlagThreshold * 100)}% of your cases.
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {redFlagSharedTags.map(tag => {
+                {redFlagTags.map(([tag, count]) => {
                   const s = getTagStyle(tag);
+                  const pct = Math.round((count / entries.length) * 100);
                   return (
-                    <span key={tag} style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 3, fontSize: 10, letterSpacing: '0.06em', background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
+                    <span key={tag} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 8px', borderRadius: 3, fontSize: 10, letterSpacing: '0.06em', background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
                       {tag}
+                      <span style={{ opacity: 0.75 }}>{pct}%</span>
                     </span>
                   );
                 })}
@@ -396,6 +504,29 @@ function HomeContent() {
               {isSearching ? 'Matching...' : 'Query'}
             </button>
           </form>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+            <span style={{ fontSize: 11, color: '#5a5a52', letterSpacing: '0.04em' }}>Relevant only</span>
+            <button
+              type="button"
+              onClick={toggleRelevantOnly}
+              role="switch"
+              aria-checked={relevantOnly}
+              style={{
+                width: 36, height: 20, borderRadius: 10, border: '0.5px solid #2e2e28',
+                background: relevantOnly ? '#111110' : '#080808',
+                position: 'relative', cursor: 'pointer', padding: 0,
+                transition: 'background 0.15s ease',
+              }}
+            >
+              <div style={{
+                width: 14, height: 14, borderRadius: '50%',
+                background: relevantOnly ? '#3B6D11' : '#3a3a30',
+                position: 'absolute', top: 2, left: relevantOnly ? 18 : 2,
+                transition: 'left 0.15s ease, background 0.15s ease',
+              }} />
+            </button>
+          </div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -422,9 +553,14 @@ function HomeContent() {
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 500, color: '#a8a8a0' }}>{match.title}</span>
-                <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#3B6D11', background: '#0a1a0c', padding: '1px 6px', borderRadius: 3, border: '0.5px solid #0c200e' }}>
-                  {(match.similarity * 100).toFixed(1)}% Match
-                </span>
+                {(() => {
+                  const m = getMatchStyle(match.similarity);
+                  return (
+                    <span style={{ fontSize: 10, fontFamily: 'monospace', color: m.color, background: m.bg, padding: '1px 6px', borderRadius: 3, border: `0.5px solid ${m.border}` }}>
+                      {(match.similarity * 100).toFixed(1)}% Match
+                    </span>
+                  );
+                })()}
               </div>
               
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>

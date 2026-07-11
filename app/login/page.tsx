@@ -7,6 +7,14 @@ import { supabase } from '@/lib/supabase';
 import AuthInput from '@/app/components/AuthInput';
 import AuthButton from '@/app/components/AuthButton';
 import { useToast } from '@/app/components/Toast';
+import GlitchText from '@/app/components/GlitchText';
+
+const LOGIN_TAGLINES = [
+  'Your failure library remembers.',
+  'Every case leaves a trace.',
+  'Reopen the file. Read the pattern.',
+  'The evidence was there all along.',
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,9 +58,7 @@ export default function LoginPage() {
         </div>
         <div>
           <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#2e2e28', letterSpacing: '0.08em', marginBottom: 12 }}>// case reopened</div>
-          <div style={{ fontSize: 13, color: '#3a3a30', lineHeight: 1.8 }}>
-            Your failure library doesn&apos;t forget. Neither should you.
-          </div>
+          <GlitchText phrases={LOGIN_TAGLINES} style={{ fontSize: 13, color: '#3a3a30', lineHeight: 1.8 }} />
         </div>
         <div style={{ fontSize: 10, color: '#1e1e1a', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
           AUTOPSY v0.3.0 — ORBITAL 26

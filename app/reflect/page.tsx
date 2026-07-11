@@ -17,6 +17,8 @@ function ReflectContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const loadEntry = useCallback(async () => {
     if (!id) {
@@ -56,6 +58,31 @@ function ReflectContent() {
     router.push('/home');
   };
 
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from('failures').delete().eq('id', id);
+      if (error) throw error;
+
+      if (entry?.case_id) {
+        const { count } = await supabase
+          .from('failures')
+          .select('id', { count: 'exact', head: true })
+          .eq('case_id', entry.case_id);
+        if (!count) {
+          await supabase.from('cases').delete().eq('id', entry.case_id);
+        }
+      }
+
+      showToast('Case deleted.', 'success');
+      router.push('/home');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to delete case.', 'error');
+      setDeleting(false);
+      setConfirmingDelete(false);
+    }
+  };
+
   if (loading) return <Loader label="LOADING CASE..." />;
 
   return (
@@ -80,13 +107,40 @@ function ReflectContent() {
           placeholder="Document insights and corrective measures here..."
         />
 
-        <div style={{ display: 'flex', gap: 12 }}>
-          <AuthButton onClick={handleSave} disabled={saving} style={{ marginTop: 0 }}>
-            {saving ? 'Saving...' : 'Save Reflection'}
-          </AuthButton>
-          <button onClick={() => router.push('/home')} style={{ background: 'transparent', border: '0.5px solid #1e1e1a', color: '#5a5a52', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
-            Cancel
-          </button>
+        <div style={{ display: 'flex', gap: 12, justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <AuthButton onClick={handleSave} disabled={saving} style={{ marginTop: 0 }}>
+              {saving ? 'Saving...' : 'Save Reflection'}
+            </AuthButton>
+            <button onClick={() => router.push('/home')} style={{ background: 'transparent', border: '0.5px solid #1e1e1a', color: '#5a5a52', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}>
+              Cancel
+            </button>
+          </div>
+
+          {confirmingDelete ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                style={{ background: '#1e0a08', border: '0.5px solid #2a1008', color: '#993C1D', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+              >
+                {deleting ? 'Deleting...' : 'Confirm delete'}
+              </button>
+              <button
+                onClick={() => setConfirmingDelete(false)}
+                style={{ background: 'transparent', border: '0.5px solid #1e1e1a', color: '#5a5a52', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmingDelete(true)}
+              style={{ background: 'transparent', border: '0.5px solid #2a1008', color: '#993C1D', padding: '8px 16px', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+            >
+              Delete case
+            </button>
+          )}
         </div>
       </div>
     </div>

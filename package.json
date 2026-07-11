@@ -13,7 +13,7 @@
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.1",
     "cytoscape": "^3.34.0",
-    "cytoscape-dagre": "^4.0.0",
+    "cytoscape-fcose": "^2.2.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"

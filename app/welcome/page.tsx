@@ -7,23 +7,33 @@ import AuthButton from '@/app/components/AuthButton';
 const STEPS = [
   {
     icon: 'ti-file-upload',
-    title: 'Open a case file',
-    body: 'Upload a marked exam script and Autopsy extracts each question you lost marks on, then tags the root cause automatically. No exam yet? Log a manual reflection instead.',
+    title: 'New Intake: open a case file',
+    body: 'Upload a marked exam script and Autopsy extracts each question you lost marks on, then tags the root cause automatically. No exam yet? Switch to the Manual Reflection tab and answer three guided prompts instead.',
   },
   {
     icon: 'ti-layout-grid',
-    title: 'Your case library',
-    body: 'Every case you open lands on your dashboard. The graph shows how your failures cluster by root cause, so recurring habits are visible instead of buried across separate scripts.',
+    title: 'Case Files: your dashboard',
+    body: 'Every case lands here: total cases, marks lost, your most common pattern, and how many are still pending reflection. Click any row to open it.',
+  },
+  {
+    icon: 'ti-vector-triangle',
+    title: 'Relationship map',
+    body: 'The graph on your dashboard connects failures that share a root cause. Bigger nodes mean more marks lost or a more frequent pattern, click one to see how it links to the rest.',
   },
   {
     icon: 'ti-alert-triangle',
     title: 'Red flags',
-    body: 'When a new entry repeats a root cause pattern from a past case, Autopsy flags it. That is the signal to stop treating it as a one-off mistake.',
+    body: 'When a new entry repeats a root cause pattern from a past case, Autopsy flags it in the sidebar. That is the signal to stop treating it as a one-off mistake.',
   },
   {
     icon: 'ti-search',
     title: 'Search by meaning',
-    body: 'Use Search in the sidebar to find past failures by what happened, not just keywords. Try something like "ran out of time" or "misread the question".',
+    body: 'Use Search in the sidebar to find past failures by what happened, not just keywords, e.g. "ran out of time". Switch off "Relevant only" to also see weaker matches, color-coded green to red by how confident the match is.',
+  },
+  {
+    icon: 'ti-edit',
+    title: 'Reflect on a case',
+    body: 'Opening a case lets you write what happened and what you would do differently. This is what actually turns a mistake into a lesson, not just a tagged entry.',
   },
 ];
 

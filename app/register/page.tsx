@@ -7,6 +7,14 @@ import { supabase } from '@/lib/supabase';
 import AuthInput from '@/app/components/AuthInput';
 import AuthButton from '@/app/components/AuthButton';
 import { useToast } from '@/app/components/Toast';
+import GlitchText from '@/app/components/GlitchText';
+
+const REGISTER_TAGLINES = [
+  'You already know what went wrong.',
+  'This is where you find out why.',
+  'Open the case. Study the wound.',
+  'Every failure leaves evidence.',
+];
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -57,9 +65,7 @@ export default function RegisterPage() {
         </div>
         <div>
           <div style={{ fontSize: 11, fontFamily: 'monospace', color: '#2e2e28', letterSpacing: '0.08em', marginBottom: 12 }}>// new case</div>
-          <div style={{ fontSize: 13, color: '#3a3a30', lineHeight: 1.8 }}>
-            You already know what went wrong. This is where you find out why.
-          </div>
+          <GlitchText phrases={REGISTER_TAGLINES} style={{ fontSize: 13, color: '#3a3a30', lineHeight: 1.8 }} />
         </div>
         <div style={{ fontSize: 10, color: '#1e1e1a', letterSpacing: '0.08em', fontFamily: 'monospace' }}>
           AUTOPSY v0.3.0 — ORBITAL 26

@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import Sidebar from '@/app/components/Sidebar';
 import { useToast } from '@/app/components/Toast';
+import AuthInput from '@/app/components/AuthInput';
 
 const prompts = [
   "What was the main thing that went wrong?",
   "What were you feeling before this exam?",
   "What would you do differently?",
+  "Any other reflections you would like to raise up?",
 ];
 
 export default function UploadPage() {
@@ -19,11 +21,12 @@ export default function UploadPage() {
   const [activeTab, setActiveTab] = useState<'upload' | 'reflect'>('upload');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
-  const [answers, setAnswers] = useState(['', '', '']);
+  const [answers, setAnswers] = useState(() => prompts.map(() => ''));
+  const [reflectionTitle, setReflectionTitle] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
-  const [parsedExamData, setParsedExamData] = useState<any[] | null>(null);
+  const [savedEntryId, setSavedEntryId] = useState<string | null>(null);
   const [originalFileName, setOriginalFileName] = useState('');
   const [namingStep, setNamingStep] = useState(false);
   const [caseName, setCaseName] = useState('');
@@ -57,11 +60,11 @@ export default function UploadPage() {
       if (!response.ok) throw new Error('Something went wrong reading this file. Please try a different PDF.');
       const rawParsedData = await response.json();
 
-      const entries: any[] = Array.isArray(rawParsedData)
-        ? rawParsedData
-        : rawParsedData.entries ?? rawParsedData.failures ?? [];
+      if (!rawParsedData.id || !rawParsedData.count) {
+        throw new Error('No gradable entries found in this script. Try a clearer scan or a different file.');
+      }
 
-      setParsedExamData(entries);
+      setSavedEntryId(rawParsedData.id);
       setOriginalFileName(file.name);
       setStatusMessage('');
       setLoading(false);
@@ -74,7 +77,7 @@ export default function UploadPage() {
   };
 
   const handleConfirmCaseName = async () => {
-    if (!parsedExamData) return;
+    if (!savedEntryId) return;
     setSavingCase(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -90,21 +93,12 @@ export default function UploadPage() {
 
       if (caseError) throw new Error(caseError.message);
 
-      const entriesToInsert = parsedExamData.map((entry) => ({
-        question_number: entry.questionNumber ?? entry.question_number,
-        marks_lost: entry.marksLost ?? entry.marks_lost,
-        root_cause: entry.rootCause ?? entry.root_cause,
-        explanation: entry.explanation,
-        tags: entry.tags,
-        user_id: user.id,
-        case_id: caseRecord.id,
-      }));
-
-      const { error: entriesError } = await supabase
+      const { error: updateError } = await supabase
         .from('failures')
-        .insert(entriesToInsert);
+        .update({ case_id: caseRecord.id, title: finalCaseName })
+        .eq('id', savedEntryId);
 
-      if (entriesError) throw new Error(entriesError.message);
+      if (updateError) throw new Error(updateError.message);
 
       router.push('/home');
     } catch (err) {
@@ -116,7 +110,7 @@ export default function UploadPage() {
 
   const handleCancelNaming = () => {
     setNamingStep(false);
-    setParsedExamData(null);
+    setSavedEntryId(null);
     setOriginalFileName('');
     setCaseName('');
     setStatusMessage('');
@@ -136,9 +130,8 @@ export default function UploadPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: user.id,
+          title: reflectionTitle.trim() || undefined,
           text: aggregatedProfileText,
-          breakdownData: answers
         }),
       });
 
@@ -295,7 +288,7 @@ export default function UploadPage() {
                   <div style={{ fontSize: 13, color: '#5a5a52', marginBottom: 4 }}>Reflection logged.</div>
                   <div style={{ fontSize: 11, color: '#3a3a30', marginBottom: 20 }}>It will appear in your case library.</div>
                   <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-                    <button onClick={() => { setSubmitted(false); setAnswers(['', '', '']); }} style={{
+                    <button onClick={() => { setSubmitted(false); setAnswers(prompts.map(() => '')); setReflectionTitle(''); }} style={{
                       background: 'transparent', border: '0.5px solid #2e2e28', color: '#5a5a52',
                       padding: '6px 16px', borderRadius: 4, fontSize: 11, cursor: 'pointer', letterSpacing: '0.06em',
                     }}>
@@ -311,6 +304,14 @@ export default function UploadPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <AuthInput
+                    label="Name this reflection (optional)"
+                    type="text"
+                    value={reflectionTitle}
+                    onChange={e => setReflectionTitle(e.target.value)}
+                    placeholder={`Manual Reflection ${new Date().toLocaleDateString('en-SG')}`}
+                    disabled={loading}
+                  />
                   {prompts.map((prompt, i) => (
                     <div key={i} style={{ border: '0.5px solid #1e1e1a', borderRadius: 6, padding: 20, background: '#0a0a08' }}>
                       <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 8 }}>
