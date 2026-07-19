@@ -44,6 +44,10 @@ body {
   to { transform: translateX(-220px); }
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 @keyframes glitch-jitter {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-1px); }

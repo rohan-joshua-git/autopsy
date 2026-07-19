@@ -29,6 +29,28 @@ interface VectorSearchResult {
   similarity: number;
 }
 
+interface TagFrequency {
+  tag: string;
+  count: number;
+  percent: number;
+  marksLost: number;
+}
+
+interface DominantPattern {
+  tag: string;
+  insight: string;
+  remediation: string;
+}
+
+interface FingerprintReport {
+  generatedAt: string;
+  totalEntries: number;
+  tagFrequencies: TagFrequency[];
+  overallSummary: string;
+  dominantPatterns: DominantPattern[];
+  insufficientData: boolean;
+}
+
 function getMatchStyle(similarity: number) {
   const pct = similarity * 100;
   if (pct >= 70) return { bg: '#0a1a0c', color: '#3B6D11', border: '#0c200e' };
@@ -98,6 +120,11 @@ function HomeContent() {
   const [relevantOnly, setRelevantOnly] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
 
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [report, setReport] = useState<FingerprintReport | null>(null);
+  const [isReportLoading, setIsReportLoading] = useState(false);
+  const [reportError, setReportError] = useState('');
+
   useEffect(() => {
     async function load() {
       const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -146,6 +173,27 @@ function HomeContent() {
     const next = !relevantOnly;
     setRelevantOnly(next);
     if (hasSearched && searchQuery.trim()) runSearch(searchQuery, next);
+  };
+
+  const generateReport = async () => {
+    setIsReportLoading(true);
+    setReportError('');
+    try {
+      const res = await fetch('/api/fingerprint-report', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate fingerprint report.');
+      setReport(data);
+    } catch (err: any) {
+      setReportError(err.message || 'Error generating fingerprint report.');
+    } finally {
+      setIsReportLoading(false);
+    }
+  };
+
+  const openReport = () => {
+    setIsSearchOpen(false);
+    setIsReportOpen(true);
+    if (!report && !isReportLoading) generateReport();
   };
 
   const handleDeleteEntry = async (entry: FailureEntry) => {
@@ -220,9 +268,10 @@ function HomeContent() {
 
       <Sidebar
         items={[
-          { icon: 'ti-layout-grid', label: 'Case Files', active: !isSearchOpen, onClick: () => setIsSearchOpen(false) },
+          { icon: 'ti-layout-grid', label: 'Case Files', active: !isSearchOpen && !isReportOpen, onClick: () => { setIsSearchOpen(false); setIsReportOpen(false); } },
           { icon: 'ti-upload', label: 'New Intake', onClick: () => router.push('/upload') },
-          { icon: 'ti-search', label: 'Search', active: isSearchOpen, onClick: () => setIsSearchOpen(true) },
+          { icon: 'ti-search', label: 'Search', active: isSearchOpen, onClick: () => { setIsReportOpen(false); setIsSearchOpen(true); } },
+          { icon: 'ti-fingerprint', label: 'Fingerprint Report', active: isReportOpen, onClick: openReport },
           { icon: 'ti-help-circle', label: 'How it works', onClick: () => router.push('/welcome') },
         ]}
         onSignOut={() => supabase.auth.signOut().then(() => router.push('/login'))}
@@ -581,6 +630,99 @@ function HomeContent() {
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Slide-out Failure Fingerprint Report Panel */}
+      <div style={{
+        position: 'absolute', top: 0, right: 0, bottom: 0,
+        width: 440, background: '#0d0d0b', borderLeft: '0.5px solid #1e1e1a',
+        transform: isReportOpen ? 'translateX(0)' : 'translateX(100%)',
+        transition: 'transform 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        zIndex: 100, display: 'flex', flexDirection: 'column',
+        boxShadow: '-10px 0 30px rgba(0,0,0,0.5)'
+      }}>
+        <div style={{ padding: '24px 24px 16px', borderBottom: '0.5px solid #1e1e1a', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 500, color: '#c8c8c0', letterSpacing: '0.04em' }}>Failure Fingerprint Report</div>
+            <div style={{ fontSize: 10, color: '#5a5a52', marginTop: 2 }}>AI-contextualized summary of your most persistent failure patterns</div>
+          </div>
+          <button onClick={() => setIsReportOpen(false)} style={{ background: 'transparent', border: 'none', color: '#3a3a30', cursor: 'pointer', fontSize: 16 }}>
+            <i className="ti ti-x" aria-hidden="true" />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 24px', borderBottom: '0.5px solid #1e1e1a', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 10, color: '#3a3a30', letterSpacing: '0.06em', fontFamily: 'monospace' }}>
+            {report && !isReportLoading ? `GENERATED ${new Date(report.generatedAt).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}` : 'ON-DEMAND ANALYSIS'}
+          </span>
+          <button
+            onClick={generateReport}
+            disabled={isReportLoading}
+            style={{
+              background: '#1a1a16', border: '0.5px solid #2e2e28', color: '#c8c8c0',
+              padding: '5px 12px', borderRadius: 4, fontSize: 11, cursor: 'pointer',
+              opacity: isReportLoading ? 0.5 : 1, display: 'flex', alignItems: 'center', gap: 6,
+            }}
+          >
+            <i className="ti ti-refresh" style={{ fontSize: 12, animation: isReportLoading ? 'spin 0.8s linear infinite' : 'none' }} aria-hidden="true" />
+            {report ? 'Regenerate' : 'Generate'}
+          </button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {isReportLoading && (
+            <div style={{ fontSize: 11, color: '#3a3a30', fontFamily: 'monospace', textAlign: 'center', marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <i className="ti ti-loader-2" style={{ fontSize: 22, animation: 'spin 0.8s linear infinite' }} aria-hidden="true" />
+              ANALYZING FAILURE PATTERNS...
+            </div>
+          )}
+
+          {!isReportLoading && reportError && (
+            <div style={{ fontSize: 12, fontFamily: 'monospace', color: '#993C1D' }}>{reportError}</div>
+          )}
+
+          {!isReportLoading && !reportError && report && report.insufficientData && (
+            <div style={{ fontSize: 11, color: '#3a3a30', fontFamily: 'monospace', textAlign: 'center', marginTop: 40 }}>
+              {report.totalEntries === 0
+                ? 'NO CASE DATA YET — OPEN A CASE TO BEGIN BUILDING YOUR FINGERPRINT'
+                : 'AT LEAST 2 CASES ARE NEEDED TO DETECT A RELIABLE PATTERN'}
+            </div>
+          )}
+
+          {!isReportLoading && !reportError && report && !report.insufficientData && (
+            <>
+              <div style={{ background: '#111110', border: '0.5px solid #1e1e1a', borderRadius: 4, padding: 16 }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 8 }}>Overall diagnosis</div>
+                <p style={{ fontSize: 12, color: '#a8a8a0', lineHeight: 1.7, margin: 0 }}>{report.overallSummary}</p>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2e2e28', marginBottom: 10 }}>Dominant patterns</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {report.dominantPatterns.map(pattern => {
+                    const s = getTagStyle(pattern.tag);
+                    const freq = report.tagFrequencies.find(f => f.tag === pattern.tag);
+                    return (
+                      <div key={pattern.tag} style={{ background: '#080808', border: '0.5px solid #1e1e1a', borderRadius: 4, padding: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 3, letterSpacing: '0.06em', background: s.bg, color: s.color, border: `0.5px solid ${s.border}` }}>
+                            {pattern.tag}
+                          </span>
+                          {freq && <span style={{ fontSize: 10, fontFamily: 'monospace', color: '#3a3a30' }}>{freq.percent}% of cases</span>}
+                        </div>
+                        <p style={{ fontSize: 12, color: '#8a8a80', lineHeight: 1.6, margin: '0 0 8px' }}>{pattern.insight}</p>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start', fontSize: 11, color: '#5a5a52', lineHeight: 1.6 }}>
+                          <i className="ti ti-target-arrow" style={{ fontSize: 13, color: '#3B6D11', marginTop: 2, flexShrink: 0 }} aria-hidden="true" />
+                          {pattern.remediation}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

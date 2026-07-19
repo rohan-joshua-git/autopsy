@@ -26,6 +26,11 @@ const STEPS = [
     body: 'When a new entry repeats a root cause pattern from a past case, Autopsy flags it in the sidebar. That is the signal to stop treating it as a one-off mistake.',
   },
   {
+    icon: 'ti-fingerprint',
+    title: 'Failure Fingerprint Report',
+    body: 'Open Fingerprint Report in the sidebar any time to have Autopsy aggregate your most recurring root causes across every case and generate a personalized diagnosis, with targeted remediation advice for the patterns it finds. It runs on demand, not on a fixed schedule, so review it whenever you want a read on your growth.',
+  },
+  {
     icon: 'ti-search',
     title: 'Search by meaning',
     body: 'Use Search in the sidebar to find past failures by what happened, not just keywords, e.g. "ran out of time". Switch off "Relevant only" to also see weaker matches, color-coded green to red by how confident the match is.',
